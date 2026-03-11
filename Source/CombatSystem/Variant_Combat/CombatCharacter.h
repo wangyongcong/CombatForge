@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
+#include "CombatForgeCharacter.h"
 #include "CombatAttacker.h"
 #include "CombatDamageable.h"
 #include "Animation/AnimInstance.h"
@@ -16,7 +16,6 @@ class UInputAction;
 struct FInputActionValue;
 class UCombatLifeBar;
 class UWidgetComponent;
-class UCombatForgeInputComponent;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogCombatCharacter, Log, All);
 
@@ -29,7 +28,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogCombatCharacter, Log, All);
  *  - Respawning
  */
 UCLASS(abstract)
-class ACombatCharacter : public ACharacter, public ICombatAttacker, public ICombatDamageable
+class ACombatCharacter : public ACombatForgeCharacter, public ICombatAttacker, public ICombatDamageable
 {
 	GENERATED_BODY()
 
@@ -78,10 +77,6 @@ protected:
 	/** Toggle Camera Side Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	UInputAction* ToggleCameraAction;
-
-	/** Input pipeline component */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UCombatForgeInputComponent> CombatInputPipeline;
 
 	/** Max amount of HP the character will have on respawn */
 	UPROPERTY(EditAnywhere, Category="Damage", meta = (ClampMin = 0, ClampMax = 100))

@@ -11,6 +11,7 @@ public class CombatForge : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"UMG",
 			"EnhancedInput",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
@@ -19,6 +20,10 @@ public class CombatForge : ModuleRules
 			"GameplayTasks"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"Slate",
+			"SlateCore"
+		});
 	}
 }

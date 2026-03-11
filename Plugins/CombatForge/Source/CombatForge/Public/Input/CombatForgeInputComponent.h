@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "CombatForgeInputBuffer.h"
+#include "Input/CombatForgeInputLogger.h"
 #include "CombatForgeInputComponent.generated.h"
 
 class UCombatForgeCommandConfig;
@@ -28,6 +29,7 @@ public:
 	void ClearInputActionBindings();
 	void BindEnhancedInput(UEnhancedInputComponent* EnhancedInputComponent);
 	void GetBufferedStates(TArray<uint16>& OutStates) const;
+	void SetInputLogger(UObject* InInputLogger);
 
 	UFUNCTION(BlueprintCallable, Category = "Combat|Input")
 	void GetDebugRejections(TArray<FString>& OutReasons) const;
@@ -35,6 +37,9 @@ public:
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input")
 	TObjectPtr<UCombatForgeCommandConfig> CommandConfig;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input")
+	TObjectPtr<const UInputAction> DirectionalInputAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input")
 	TArray<FCombatForgeInputActionBinding> InputActionBindings;
@@ -47,6 +52,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Combat|Input")
 	TArray<FCombatForgeCommand> CommandOverrides;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input|Debug")
+	bool bShowInputLogger = false;
 
 	FCombatForgeRawInputEventDelegate OnRawInputEvent;
 	FCombatForgeCommandDelegate OnCommand;
@@ -67,8 +75,9 @@ private:
 
 private:
 	FCombatForgetInputBuffer InputBuffer;
-	TObjectPtr<const UInputAction> DirectionalInputAction = nullptr;
+	TScriptInterface<ICombatForgeInputLogger> InputLogger;
 	double AccumulatorMs = 0.0;
 	FVector2D CurrentDirectionalValue = FVector2D::ZeroVector;
 	uint16 CurrentButtonStateBits = 0;
+	int32 DebugSequenceCounter = 0;
 };

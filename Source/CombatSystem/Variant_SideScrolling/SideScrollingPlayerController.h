@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/PlayerController.h"
+#include "CombatForgeController.h"
 #include "EnhancedInput/Public/InputAction.h"
 #include "SideScrollingPlayerController.generated.h"
 
@@ -16,7 +16,7 @@ class UInputMappingContext;
  *  Respawns the player pawn at the player start if it is destroyed
  */
 UCLASS(abstract, Config="Game")
-class ASideScrollingPlayerController : public APlayerController
+class ASideScrollingPlayerController : public ACombatForgeController
 {
 	GENERATED_BODY()
 	

@@ -19,8 +19,6 @@
 
 ACombatCharacter::ACombatCharacter()
 {
-	PrimaryActorTick.bCanEverTick = true;
-
 	// bind the attack montage ended delegate
 	OnAttackMontageEnded.BindUObject(this, &ACombatCharacter::AttackMontageEnded);
 
@@ -47,9 +45,6 @@ ACombatCharacter::ACombatCharacter()
 	// create the life bar widget component
 	LifeBar = CreateDefaultSubobject<UWidgetComponent>(TEXT("LifeBar"));
 	LifeBar->SetupAttachment(RootComponent);
-
-	// create the combat input pipeline component
-	CombatInputPipeline = CreateDefaultSubobject<UCombatForgeInputComponent>(TEXT("CombatInputPipeline"));
 
 	// set the player tag
 	Tags.Add(FName("Player"));
@@ -528,19 +523,18 @@ void ACombatCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ACombatCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		if (CombatInputPipeline != nullptr)
+		if (CombatForgeInput != nullptr)
 		{
-			CombatInputPipeline->ClearInputActionBindings();
-			CombatInputPipeline->SetInputActionBinding(ComboAttackAction, ECombatForgeInputButton::X);
-			CombatInputPipeline->SetInputActionBinding(HeavyAttackAction, ECombatForgeInputButton::Y);
-			CombatInputPipeline->SetDirectionalInputAction(MoveAction);
-			CombatInputPipeline->BindEnhancedInput(EnhancedInputComponent);
+			CombatForgeInput->ClearInputActionBindings();
+			CombatForgeInput->SetInputActionBinding(ComboAttackAction, ECombatForgeInputButton::X);
+			CombatForgeInput->SetInputActionBinding(HeavyAttackAction, ECombatForgeInputButton::Y);
+			CombatForgeInput->SetDirectionalInputAction(MoveAction);
 		}
+
+		Super::SetupPlayerInputComponent(PlayerInputComponent);
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACombatCharacter::Move);
@@ -566,6 +560,10 @@ void ACombatCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 		// Camera Side Toggle
 		EnhancedInputComponent->BindAction(ToggleCameraAction, ETriggerEvent::Triggered, this, &ACombatCharacter::ToggleCamera);
+	}
+	else
+	{
+		Super::SetupPlayerInputComponent(PlayerInputComponent);
 	}
 }
 

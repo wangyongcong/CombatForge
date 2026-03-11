@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/PlayerController.h"
+#include "CombatForgeController.h"
 #include "CombatSystemPlayerController.generated.h"
 
 class UInputMappingContext;
@@ -14,7 +14,7 @@ class UUserWidget;
  *  Manages input mappings
  */
 UCLASS(abstract)
-class ACombatSystemPlayerController : public APlayerController
+class ACombatSystemPlayerController : public ACombatForgeController
 {
 	GENERATED_BODY()
 	

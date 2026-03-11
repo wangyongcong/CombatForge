@@ -321,6 +321,8 @@ void APlatformingCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void APlatformingCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{

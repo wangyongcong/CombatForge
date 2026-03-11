@@ -5,11 +5,11 @@
 
 namespace
 {
-	static constexpr uint16 DirectionMask = CombatForgeInput::DirectionMask;
-	static constexpr uint16 VerticalMask =
+	static constexpr uint16 InputBufferDirectionMask = CombatForgeInput::DirectionMask;
+	static constexpr uint16 InputBufferVerticalMask =
 		static_cast<uint16>(ECombatForgeInputToken::Up) |
 		static_cast<uint16>(ECombatForgeInputToken::Down);
-	static constexpr uint16 HorizontalMask =
+	static constexpr uint16 InputBufferHorizontalMask =
 		static_cast<uint16>(ECombatForgeInputToken::Forward) |
 		static_cast<uint16>(ECombatForgeInputToken::Back);
 
@@ -53,7 +53,7 @@ namespace
 
 	static uint16 NormalizeStateBits(uint16 StateBits)
 	{
-		return static_cast<uint16>((StateBits & static_cast<uint16>(~DirectionMask)) | NormalizeDirectionalBits(StateBits & DirectionMask));
+		return static_cast<uint16>((StateBits & static_cast<uint16>(~InputBufferDirectionMask)) | NormalizeDirectionalBits(StateBits & InputBufferDirectionMask));
 	}
 
 }
@@ -295,28 +295,28 @@ bool FCombatForgetInputBuffer::MatchesElementState(uint16 StateBits, uint16 Requ
 		return false;
 	}
 
-	const uint16 RequiredDirections = RequiredMask & DirectionMask;
+	const uint16 RequiredDirections = RequiredMask & InputBufferDirectionMask;
 	if (RequiredDirections == 0)
 	{
 		return true;
 	}
 
-	uint16 AcceptedDirections = AcceptedMask & DirectionMask;
+	uint16 AcceptedDirections = AcceptedMask & InputBufferDirectionMask;
 	if (AcceptedDirections == 0)
 	{
-		const bool bHasVertical = (RequiredDirections & VerticalMask) != 0;
-		const bool bHasHorizontal = (RequiredDirections & HorizontalMask) != 0;
+		const bool bHasVertical = (RequiredDirections & InputBufferVerticalMask) != 0;
+		const bool bHasHorizontal = (RequiredDirections & InputBufferHorizontalMask) != 0;
 		if (bHasVertical && !bHasHorizontal)
 		{
-			AcceptedDirections = HorizontalMask;
+			AcceptedDirections = InputBufferHorizontalMask;
 		}
 		else if (bHasHorizontal && !bHasVertical)
 		{
-			AcceptedDirections = VerticalMask;
+			AcceptedDirections = InputBufferVerticalMask;
 		}
 	}
 
-	const uint16 StateDirections = StateBits & DirectionMask;
+	const uint16 StateDirections = StateBits & InputBufferDirectionMask;
 	const uint16 ExtraDirections = static_cast<uint16>(StateDirections & ~RequiredDirections);
 	return (ExtraDirections & static_cast<uint16>(~AcceptedDirections)) == 0;
 }

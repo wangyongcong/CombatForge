@@ -95,6 +95,32 @@ bool FCombatForgeCommandConfigCacheValidityTest::RunTest(const FString& Paramete
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeCommandDisplayNameHashStabilityTest,
+	"CombatForge.Input.Compiler.DisplayNameIgnoredByHash",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeCommandDisplayNameHashStabilityTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+
+	FCombatForgeCommand Command;
+	Command.Id = 21;
+	Command.DisplayName = TEXT("Hadouken");
+	Command.CommandString = TEXT("D,DF,F,x");
+	Command.InputWindowFrames = 20;
+	Command.Priority = 5;
+
+	TArray<FCombatForgeCommand> Commands{ Command };
+	const uint32 FirstHash = FCombatForgeCommandCompiler::ComputeSourceHash(Settings, Commands);
+
+	Commands[0].DisplayName = TEXT("Fireball");
+	const uint32 SecondHash = FCombatForgeCommandCompiler::ComputeSourceHash(Settings, Commands);
+
+	TestEqual(TEXT("Display name changes do not alter compiler source hash"), SecondHash, FirstHash);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FCombatForgeInputBufferDeterminismTest,
 	"CombatForge.Input.Buffer.WraparoundAndExpiry",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

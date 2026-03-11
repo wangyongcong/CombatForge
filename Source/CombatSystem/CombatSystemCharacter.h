@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
+#include "CombatForgeCharacter.h"
 #include "Logging/LogMacros.h"
 #include "CombatSystemCharacter.generated.h"
 
@@ -19,7 +19,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
  *  Implements a controllable orbiting camera
  */
 UCLASS(abstract)
-class ACombatSystemCharacter : public ACharacter
+class ACombatSystemCharacter : public ACombatForgeCharacter
 {
 	GENERATED_BODY()
 

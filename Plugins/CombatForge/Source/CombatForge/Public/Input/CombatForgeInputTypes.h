@@ -83,6 +83,9 @@ struct FCombatForgeCommand
 	int32 Id = 0;
 
 	UPROPERTY(EditAnywhere, Category = "Combat|Input")
+	FString DisplayName;
+
+	UPROPERTY(EditAnywhere, Category = "Combat|Input")
 	FString CommandString;
 
 	UPROPERTY(EditAnywhere, Category = "Combat|Input", meta = (ClampMin = 1))
@@ -144,4 +147,45 @@ struct FCombatForgeInputRuntimeSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float DirectionDeadZone = 0.35f;
+};
+
+UENUM()
+enum class ECombatForgeInputDisplayTokenKind : uint8
+{
+	Direction = 0,
+	Button,
+	Text
+};
+
+USTRUCT()
+struct FCombatForgeInputDisplayToken
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat|Input|Debug")
+	ECombatForgeInputDisplayTokenKind Kind = ECombatForgeInputDisplayTokenKind::Text;
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat|Input|Debug")
+	FString Text;
+};
+
+USTRUCT()
+struct FCombatForgeInputLogEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat|Input|Debug")
+	int32 Sequence = 0;
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat|Input|Debug")
+	uint16 StateBits = 0;
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat|Input|Debug")
+	TArray<FCombatForgeInputDisplayToken> Tokens;
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat|Input|Debug")
+	FString DisplayText;
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat|Input|Debug")
+	TArray<FString> MatchedCommandNames;
 };

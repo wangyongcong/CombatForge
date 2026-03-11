@@ -10,6 +10,49 @@
 namespace
 {
 	static constexpr uint16 DirectionMask = CombatForgeInput::DirectionMask;
+
+	static uint16 NormalizeDirectionalBits(uint16 DirectionBits)
+	{
+		bool bUp = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Up)) != 0;
+		bool bDown = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Down)) != 0;
+		bool bForward = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Forward)) != 0;
+		bool bBack = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Back)) != 0;
+
+		if (bUp && bDown)
+		{
+			bUp = false;
+			bDown = false;
+		}
+		if (bForward && bBack)
+		{
+			bForward = false;
+			bBack = false;
+		}
+
+		uint16 Result = 0;
+		if (bUp)
+		{
+			Result |= static_cast<uint16>(ECombatForgeInputToken::Up);
+		}
+		if (bDown)
+		{
+			Result |= static_cast<uint16>(ECombatForgeInputToken::Down);
+		}
+		if (bForward)
+		{
+			Result |= static_cast<uint16>(ECombatForgeInputToken::Forward);
+		}
+		if (bBack)
+		{
+			Result |= static_cast<uint16>(ECombatForgeInputToken::Back);
+		}
+		return Result;
+	}
+
+	static uint16 NormalizeStateBits(uint16 StateBits)
+	{
+		return static_cast<uint16>((StateBits & static_cast<uint16>(~DirectionMask)) | NormalizeDirectionalBits(StateBits & DirectionMask));
+	}
 }
 
 UCombatForgeInputComponent::UCombatForgeInputComponent()
@@ -81,6 +124,27 @@ void UCombatForgeInputComponent::GetBufferedStates(TArray<uint16>& OutStates) co
 	InputBuffer.GetBufferedStates(OutStates);
 }
 
+void UCombatForgeInputComponent::SetInputLogger(UObject* InInputLogger)
+{
+	if (InInputLogger == nullptr)
+	{
+		InputLogger = nullptr;
+		return;
+	}
+
+	if (!InInputLogger->GetClass()->ImplementsInterface(UCombatForgeInputLogger::StaticClass()))
+	{
+		return;
+	}
+
+	InputLogger.SetObject(InInputLogger);
+	InputLogger.SetInterface(Cast<ICombatForgeInputLogger>(InInputLogger));
+	if (InputLogger.GetInterface() != nullptr)
+	{
+		InputLogger->ResetInputLog();
+	}
+}
+
 void UCombatForgeInputComponent::GetDebugRejections(TArray<FString>& OutReasons) const
 {
 	OutReasons = InputBuffer.GetDebugRejections();
@@ -98,7 +162,7 @@ void UCombatForgeInputComponent::TickComponent(float DeltaTime, enum ELevelTick 
 
 	const int32 StepMs = FMath::Max(1, FixedStepMs);
 	AccumulatorMs += static_cast<double>(DeltaTime) * 1000.0;
-	while (AccumulatorMs >= static_cast<double>(StepMs))
+	// while (AccumulatorMs >= static_cast<double>(StepMs))
 	{
 		StepSimulation();
 		AccumulatorMs -= static_cast<double>(StepMs);
@@ -119,7 +183,12 @@ void UCombatForgeInputComponent::InitializeRuntime()
 	AccumulatorMs = 0.0;
 	CurrentDirectionalValue = FVector2D::ZeroVector;
 	CurrentButtonStateBits = 0;
+	DebugSequenceCounter = 0;
 	InputBuffer.Configure(Settings, Commands);
+	if (InputLogger.GetInterface() != nullptr)
+	{
+		InputLogger->ResetInputLog();
+	}
 }
 
 void UCombatForgeInputComponent::HandleInputStarted(const FInputActionInstance& ActionInstance)
@@ -177,7 +246,12 @@ void UCombatForgeInputComponent::StepSimulation()
 
 	if (bStateChanged)
 	{
-		OnRawInputEvent.Broadcast(NewStateBits);
+		const uint16 LoggedStateBits = NormalizeStateBits(NewStateBits);
+		if (InputLogger.GetInterface() != nullptr)
+		{
+			InputLogger->AddInputLogEntry(++DebugSequenceCounter, LoggedStateBits, Commands);
+		}
+		OnRawInputEvent.Broadcast(LoggedStateBits);
 		for (const FCombatForgeCommand* Command : Commands)
 		{
 			if (Command != nullptr)

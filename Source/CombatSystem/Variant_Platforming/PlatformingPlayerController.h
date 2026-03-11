@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/PlayerController.h"
+#include "CombatForgeController.h"
 #include "PlatformingPlayerController.generated.h"
 
 class UInputMappingContext;
@@ -15,7 +15,7 @@ class APlatformingCharacter;
  *  Respawns the player character at the Player Start when it's destroyed
  */
 UCLASS(abstract, Config="Game")
-class APlatformingPlayerController : public APlayerController
+class APlatformingPlayerController : public ACombatForgeController
 {
 	GENERATED_BODY()
 	

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
+#include "CombatForgeCharacter.h"
 #include "SideScrollingCharacter.generated.h"
 
 class UCameraComponent;
@@ -14,7 +14,7 @@ struct FInputActionValue;
  *  A player-controllable character side scrolling game
  */
 UCLASS(abstract)
-class ASideScrollingCharacter : public ACharacter
+class ASideScrollingCharacter : public ACombatForgeCharacter
 {
 	GENERATED_BODY()
 
