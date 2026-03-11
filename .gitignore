@@ -1,0 +1,30 @@
+# Unreal Engine build artifacts
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# IDE and editor settings
+.idea/
+.vs/
+*.VC.db
+*.VC.opendb
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# JetBrains / ReSharper local files
+*.DotSettings.user
+
+# Build and tool caches
+.dotnet_cli/
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# OS-generated files
+Thumbs.db
+Desktop.ini

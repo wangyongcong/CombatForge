@@ -1,0 +1,40 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "CombatForge",
+	"Description": "Combat input pipeline and command matching module.",
+	"Category": "Gameplay",
+	"EnabledByDefault": true,
+	"CanContainContent": true,
+	"Plugins": [
+		{
+			"Name": "EnhancedInput",
+			"Enabled": true
+		},
+		{
+			"Name": "StateTree",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayStateTree",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		}
+	],
+	"Modules": [
+		{
+			"Name": "CombatForge",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "CombatForgeEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}
