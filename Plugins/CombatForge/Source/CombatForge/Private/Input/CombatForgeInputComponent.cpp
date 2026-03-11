@@ -162,7 +162,7 @@ void UCombatForgeInputComponent::TickComponent(float DeltaTime, enum ELevelTick 
 
 	const int32 StepMs = FMath::Max(1, FixedStepMs);
 	AccumulatorMs += static_cast<double>(DeltaTime) * 1000.0;
-	// while (AccumulatorMs >= static_cast<double>(StepMs))
+	while (AccumulatorMs >= static_cast<double>(StepMs))
 	{
 		StepSimulation();
 		AccumulatorMs -= static_cast<double>(StepMs);
