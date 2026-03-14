@@ -332,4 +332,154 @@ bool FCombatForgeInputMugenDirectionalSupersetTest::RunTest(const FString& Param
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeInputExactCardinalDirectionTest,
+	"CombatForge.Input.Matcher.ExactCardinalDirections",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeInputExactCardinalDirectionTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.BufferCapacity = 16;
+	Settings.DefaultInputWindowFrames = 10;
+
+	FCombatForgeCommand ForwardAndButton;
+	ForwardAndButton.Id = 7;
+	ForwardAndButton.CommandString = TEXT("F+a");
+	ForwardAndButton.InputWindowFrames = 10;
+
+	FCombatForgetInputBuffer DiagonalRejectBuffer;
+	DiagonalRejectBuffer.Configure(Settings, { ForwardAndButton });
+
+	TArray<const FCombatForgeCommand*> Intents;
+	CombatForgeInputTestHelpers::TickState(DiagonalRejectBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(
+		DiagonalRejectBuffer,
+		CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+		Intents);
+	TestEqual(TEXT("F+a rejects diagonal down-forward when exact cardinals are required"), Intents.Num(), 0);
+
+	FCombatForgetInputBuffer ForwardAcceptBuffer;
+	ForwardAcceptBuffer.Configure(Settings, { ForwardAndButton });
+	Intents.Reset();
+	CombatForgeInputTestHelpers::TickState(ForwardAcceptBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(
+		ForwardAcceptBuffer,
+		static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+		Intents);
+	TestEqual(TEXT("F+a still matches exact forward plus button"), Intents.Num(), 1);
+
+	FCombatForgeCommand DownSuperset;
+	DownSuperset.Id = 8;
+	DownSuperset.CommandString = TEXT("$D+a");
+	DownSuperset.InputWindowFrames = 10;
+
+	FCombatForgetInputBuffer SupersetBuffer;
+	SupersetBuffer.Configure(Settings, { DownSuperset });
+	Intents.Reset();
+	CombatForgeInputTestHelpers::TickState(SupersetBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(
+		SupersetBuffer,
+		CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+		Intents);
+	TestEqual(TEXT("$D+a still accepts diagonal down-forward"), Intents.Num(), 1);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeInputHeldCardinalNeighborDiagonalTest,
+	"CombatForge.Input.Matcher.HeldCardinalAcceptsNeighborDiagonal",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeInputHeldCardinalNeighborDiagonalTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.BufferCapacity = 16;
+	Settings.DefaultInputWindowFrames = 10;
+
+	FCombatForgeCommand QuarterCircle;
+	QuarterCircle.Id = 9;
+	QuarterCircle.CommandString = TEXT("/D,DF,F+a");
+	QuarterCircle.InputWindowFrames = 10;
+
+	FCombatForgetInputBuffer InputBuffer;
+	InputBuffer.Configure(Settings, { QuarterCircle });
+
+	TArray<const FCombatForgeCommand*> Intents;
+	CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+	CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+	CombatForgeInputTestHelpers::TickState(
+		InputBuffer,
+		static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+		Intents);
+	TestEqual(TEXT("/D succeeds on the DF anchor tick for quarter-circle motions"), Intents.Num(), 1);
+
+	FCombatForgeCommand ExactForwardAndButton;
+	ExactForwardAndButton.Id = 10;
+	ExactForwardAndButton.CommandString = TEXT("F+a");
+	ExactForwardAndButton.InputWindowFrames = 10;
+
+	FCombatForgetInputBuffer ExactForwardBuffer;
+	ExactForwardBuffer.Configure(Settings, { ExactForwardAndButton });
+	Intents.Reset();
+	CombatForgeInputTestHelpers::TickState(ExactForwardBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(
+		ExactForwardBuffer,
+		CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+		Intents);
+	TestEqual(TEXT("Press semantics remain exact for plain forward"), Intents.Num(), 0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeInputFirstDirectionalPressAcceptsHeldStateTest,
+	"CombatForge.Input.Matcher.FirstDirectionalPressAcceptsHeldState",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeInputFirstDirectionalPressAcceptsHeldStateTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.BufferCapacity = 16;
+	Settings.DefaultInputWindowFrames = 10;
+
+	FCombatForgeCommand DragonPunch;
+	DragonPunch.Id = 11;
+	DragonPunch.CommandString = TEXT("F,D,DF+a");
+	DragonPunch.InputWindowFrames = 10;
+
+	FCombatForgetInputBuffer InputBuffer;
+	InputBuffer.Configure(Settings, { DragonPunch });
+
+	TArray<const FCombatForgeCommand*> Intents;
+	CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+	CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+	CombatForgeInputTestHelpers::TickState(
+		InputBuffer,
+		CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+		Intents);
+	TestEqual(TEXT("First directional press element can match from held state"), Intents.Num(), 1);
+
+	FCombatForgeCommand Buttons;
+	Buttons.Id = 12;
+	Buttons.CommandString = TEXT("a,b");
+	Buttons.InputWindowFrames = 10;
+
+	FCombatForgetInputBuffer ButtonBuffer;
+	ButtonBuffer.Configure(Settings, { Buttons });
+	Intents.Reset();
+	CombatForgeInputTestHelpers::TickState(ButtonBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(ButtonBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
+	CombatForgeInputTestHelpers::TickState(ButtonBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
+	CombatForgeInputTestHelpers::TickState(ButtonBuffer, static_cast<uint16>(ECombatForgeInputToken::A) | static_cast<uint16>(ECombatForgeInputToken::B), Intents);
+	TestEqual(TEXT("Non-directional first press semantics are unchanged"), Intents.Num(), 1);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

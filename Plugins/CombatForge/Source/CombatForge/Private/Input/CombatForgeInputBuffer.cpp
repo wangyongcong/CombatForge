@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Input/CombatForgeInputBuffer.h"
+#include "CombatForge.h"
 #include "Input/CombatForgeCommandCompiler.h"
 
 namespace
@@ -56,6 +57,133 @@ namespace
 		return static_cast<uint16>((StateBits & static_cast<uint16>(~InputBufferDirectionMask)) | NormalizeDirectionalBits(StateBits & InputBufferDirectionMask));
 	}
 
+	static FString FormatStateBitsForLog(uint16 StateBits)
+	{
+		const uint16 NormalizedBits = NormalizeStateBits(StateBits);
+		TArray<FString> Parts;
+
+		const uint16 DirectionBits = NormalizedBits & InputBufferDirectionMask;
+		switch (DirectionBits)
+		{
+		case static_cast<uint16>(ECombatForgeInputToken::Up):
+			Parts.Add(TEXT("U"));
+			break;
+		case static_cast<uint16>(ECombatForgeInputToken::Down):
+			Parts.Add(TEXT("D"));
+			break;
+		case static_cast<uint16>(ECombatForgeInputToken::Forward):
+			Parts.Add(TEXT("F"));
+			break;
+		case static_cast<uint16>(ECombatForgeInputToken::Back):
+			Parts.Add(TEXT("B"));
+			break;
+		case static_cast<uint16>(ECombatForgeInputToken::Up) | static_cast<uint16>(ECombatForgeInputToken::Forward):
+			Parts.Add(TEXT("UF"));
+			break;
+		case static_cast<uint16>(ECombatForgeInputToken::Up) | static_cast<uint16>(ECombatForgeInputToken::Back):
+			Parts.Add(TEXT("UB"));
+			break;
+		case static_cast<uint16>(ECombatForgeInputToken::Down) | static_cast<uint16>(ECombatForgeInputToken::Forward):
+			Parts.Add(TEXT("DF"));
+			break;
+		case static_cast<uint16>(ECombatForgeInputToken::Down) | static_cast<uint16>(ECombatForgeInputToken::Back):
+			Parts.Add(TEXT("DB"));
+			break;
+		default:
+			Parts.Add(TEXT("N"));
+			break;
+		}
+
+		struct FButtonLabel
+		{
+			ECombatForgeInputToken Token;
+			const TCHAR* Label;
+		};
+
+		static const FButtonLabel Buttons[] =
+		{
+			{ ECombatForgeInputToken::X, TEXT("X") },
+			{ ECombatForgeInputToken::Y, TEXT("Y") },
+			{ ECombatForgeInputToken::Z, TEXT("Z") },
+			{ ECombatForgeInputToken::A, TEXT("A") },
+			{ ECombatForgeInputToken::B, TEXT("B") },
+			{ ECombatForgeInputToken::C, TEXT("C") }
+		};
+
+		for (const FButtonLabel& Button : Buttons)
+		{
+			if ((NormalizedBits & static_cast<uint16>(Button.Token)) != 0)
+			{
+				Parts.Add(Button.Label);
+			}
+		}
+
+		return FString::Join(Parts, TEXT("+"));
+	}
+
+	static FString DescribeElement(const FCombatForgeCommandElement& Element)
+	{
+		const TCHAR* MatchKind = TEXT("Press");
+		switch (Element.MatchKind)
+		{
+		case ECombatForgeCommandElementMatchKind::Held:
+			MatchKind = TEXT("Held");
+			break;
+		case ECombatForgeCommandElementMatchKind::Release:
+			MatchKind = TEXT("Release");
+			break;
+		case ECombatForgeCommandElementMatchKind::Press:
+		default:
+			break;
+		}
+
+		return FString::Printf(
+			TEXT("%s req=%s accepted=0x%04x hold=%d strict=%s"),
+			MatchKind,
+			*FormatStateBitsForLog(Element.RequiredMask),
+			Element.AcceptedMask,
+			Element.MinHeldFrames,
+			Element.bStrictAfterPrevious ? TEXT("true") : TEXT("false"));
+	}
+
+	static bool MatchesHeldElementState(uint16 StateBits, int32 RequiredMask, int32 AcceptedMask)
+	{
+		StateBits = NormalizeStateBits(StateBits);
+		if ((static_cast<int32>(StateBits) & RequiredMask) != RequiredMask)
+		{
+			return false;
+		}
+
+		const uint16 RequiredDirections = static_cast<uint16>(RequiredMask & InputBufferDirectionMask);
+		if (RequiredDirections == 0)
+		{
+			return true;
+		}
+
+		uint16 AllowedExtraDirections = static_cast<uint16>(AcceptedMask & InputBufferDirectionMask);
+		if (AllowedExtraDirections == 0)
+		{
+			const bool bHasVertical = (RequiredDirections & InputBufferVerticalMask) != 0;
+			const bool bHasHorizontal = (RequiredDirections & InputBufferHorizontalMask) != 0;
+			if (bHasVertical && !bHasHorizontal)
+			{
+				AllowedExtraDirections = InputBufferHorizontalMask;
+			}
+			else if (bHasHorizontal && !bHasVertical)
+			{
+				AllowedExtraDirections = InputBufferVerticalMask;
+			}
+		}
+
+		const uint16 StateDirections = StateBits & InputBufferDirectionMask;
+		const uint16 ExtraDirections = static_cast<uint16>(StateDirections & ~RequiredDirections);
+		return (ExtraDirections & static_cast<uint16>(~AllowedExtraDirections)) == 0;
+	}
+
+	static bool IsDirectionalElement(const FCombatForgeCommandElement& Element)
+	{
+		return (Element.RequiredMask & InputBufferDirectionMask) != 0;
+	}
 }
 
 void FCombatForgetInputBuffer::Configure(const FCombatForgeInputRuntimeSettings& InSettings, const TArray<FCombatForgeCommand>& InCommands)
@@ -182,7 +310,11 @@ bool FCombatForgetInputBuffer::TryMatchCommand(const FCombatForgeCommand& Comman
 		switch (Element.MatchKind)
 		{
 		case ECombatForgeCommandElementMatchKind::Held:
-			return MatchesElementState(CurrentState, Element.RequiredMask, Element.AcceptedMask);
+			if (!MatchesHeldElementState(CurrentState, Element.RequiredMask, Element.AcceptedMask))
+			{
+				return false;
+			}
+			return true;
 		case ECombatForgeCommandElementMatchKind::Release:
 			if (!MatchesElementState(PreviousState, Element.RequiredMask, Element.AcceptedMask))
 			{
@@ -194,13 +326,25 @@ bool FCombatForgetInputBuffer::TryMatchCommand(const FCombatForgeCommand& Comman
 			}
 			if (Element.MinHeldFrames > 0)
 			{
-				return GetMinimumHeldTicks(HeldTicksByBit, Element.RequiredMask) >= Element.MinHeldFrames && TickIndex == LatestIndex;
+				const int32 HeldTicks = GetMinimumHeldTicks(HeldTicksByBit, Element.RequiredMask);
+				if (HeldTicks < Element.MinHeldFrames || TickIndex != LatestIndex)
+				{
+					return false;
+				}
+				return true;
 			}
 			return true;
 		case ECombatForgeCommandElementMatchKind::Press:
 		default:
-			return MatchesElementState(CurrentState, Element.RequiredMask, Element.AcceptedMask)
-				&& !MatchesElementState(PreviousState, Element.RequiredMask, Element.AcceptedMask);
+			if (!MatchesElementState(CurrentState, Element.RequiredMask, Element.AcceptedMask))
+			{
+				return false;
+			}
+			if (MatchesElementState(PreviousState, Element.RequiredMask, Element.AcceptedMask))
+			{
+				return false;
+			}
+			return true;
 		}
 	};
 
@@ -226,7 +370,17 @@ bool FCombatForgetInputBuffer::TryMatchCommand(const FCombatForgeCommand& Comman
 		bool bFound = false;
 		for (int32 TickIndex = MatchedTickIndex - 1; TickIndex >= WindowStart; --TickIndex)
 		{
-			if (!MatchElementAt(Element, TickIndex))
+			bool bElementMatched = MatchElementAt(Element, TickIndex);
+			if (!bElementMatched
+				&& ElementIndex == 0
+				&& Element.MatchKind == ECombatForgeCommandElementMatchKind::Press
+				&& IsDirectionalElement(Element))
+			{
+				const uint16 CurrentState = GetStateAtLogicalIndex(TickIndex);
+				bElementMatched = MatchesElementState(CurrentState, Element.RequiredMask, Element.AcceptedMask);
+			}
+
+			if (!bElementMatched)
 			{
 				continue;
 			}
@@ -270,7 +424,7 @@ uint16 FCombatForgetInputBuffer::GetStateAtLogicalIndex(int32 LogicalIndex) cons
 	return Storage[(Head + LogicalIndex) % Storage.Num()];
 }
 
-int32 FCombatForgetInputBuffer::GetMinimumHeldTicks(const int32 InHeldTicksByBit[16], uint16 Mask)
+int32 FCombatForgetInputBuffer::GetMinimumHeldTicks(const int32 InHeldTicksByBit[16], int32 Mask)
 {
 	int32 MinimumHeldTicks = TNumericLimits<int32>::Max();
 	for (int32 BitIndex = 0; BitIndex < 16; ++BitIndex)
@@ -287,35 +441,21 @@ int32 FCombatForgetInputBuffer::GetMinimumHeldTicks(const int32 InHeldTicksByBit
 	return MinimumHeldTicks == TNumericLimits<int32>::Max() ? 0 : MinimumHeldTicks;
 }
 
-bool FCombatForgetInputBuffer::MatchesElementState(uint16 StateBits, uint16 RequiredMask, uint16 AcceptedMask)
+bool FCombatForgetInputBuffer::MatchesElementState(uint16 StateBits, int32 RequiredMask, int32 AcceptedMask)
 {
 	StateBits = NormalizeStateBits(StateBits);
-	if ((StateBits & RequiredMask) != RequiredMask)
+	if ((static_cast<int32>(StateBits) & RequiredMask) != RequiredMask)
 	{
 		return false;
 	}
 
-	const uint16 RequiredDirections = RequiredMask & InputBufferDirectionMask;
+	const uint16 RequiredDirections = static_cast<uint16>(RequiredMask & InputBufferDirectionMask);
 	if (RequiredDirections == 0)
 	{
 		return true;
 	}
 
-	uint16 AcceptedDirections = AcceptedMask & InputBufferDirectionMask;
-	if (AcceptedDirections == 0)
-	{
-		const bool bHasVertical = (RequiredDirections & InputBufferVerticalMask) != 0;
-		const bool bHasHorizontal = (RequiredDirections & InputBufferHorizontalMask) != 0;
-		if (bHasVertical && !bHasHorizontal)
-		{
-			AcceptedDirections = InputBufferHorizontalMask;
-		}
-		else if (bHasHorizontal && !bHasVertical)
-		{
-			AcceptedDirections = InputBufferVerticalMask;
-		}
-	}
-
+	uint16 AcceptedDirections = static_cast<uint16>(AcceptedMask & InputBufferDirectionMask);
 	const uint16 StateDirections = StateBits & InputBufferDirectionMask;
 	const uint16 ExtraDirections = static_cast<uint16>(StateDirections & ~RequiredDirections);
 	return (ExtraDirections & static_cast<uint16>(~AcceptedDirections)) == 0;
@@ -337,5 +477,3 @@ bool FCombatForgetInputBuffer::HasInterveningChanges(int32 EarlierIndex, int32 L
 	}
 	return false;
 }
-
-

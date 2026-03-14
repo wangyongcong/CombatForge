@@ -6,7 +6,8 @@
 #include "InputAction.h"
 #include "CombatForgeInputTypes.generated.h"
 
-enum class ECombatForgeInputToken : uint16
+UENUM(meta = (Bitflags, UseEnumValuesAsMaskValuesInEditor = "true"))
+enum class ECombatForgeInputToken : int32
 {
 	None = 0,
 
@@ -58,11 +59,11 @@ struct FCombatForgeCommandElement
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, Category = "Combat|Input")
-	uint16 RequiredMask = 0;
+	UPROPERTY(EditAnywhere, Category = "Combat|Input", meta = (Bitmask, BitmaskEnum = "/Script/CombatForge.ECombatForgeInputToken"))
+	int32 RequiredMask = 0;
 
-	UPROPERTY(EditAnywhere, Category = "Combat|Input")
-	uint16 AcceptedMask = 0;
+	UPROPERTY(EditAnywhere, Category = "Combat|Input", meta = (Bitmask, BitmaskEnum = "/Script/CombatForge.ECombatForgeInputToken"))
+	int32 AcceptedMask = 0;
 
 	UPROPERTY(EditAnywhere, Category = "Combat|Input")
 	ECombatForgeCommandElementMatchKind MatchKind = ECombatForgeCommandElementMatchKind::Press;

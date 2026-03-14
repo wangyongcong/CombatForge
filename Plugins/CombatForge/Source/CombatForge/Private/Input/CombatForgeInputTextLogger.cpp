@@ -2,13 +2,12 @@
 
 #include "Input/CombatForgeInputTextLogger.h"
 
+#include "CombatForge.h"
 #include "Input/CombatForgeInputLoggerWidget.h"
 #include "Input/CombatForgeInputTypes.h"
 
 namespace
 {
-	static constexpr uint16 DirectionMask = CombatForgeInput::DirectionMask;
-
 	static void AddToken(
 		TArray<FCombatForgeInputDisplayToken>& Tokens,
 		ECombatForgeInputDisplayTokenKind Kind,
@@ -29,7 +28,7 @@ void UCombatForgeInputTextLogger::BuildDisplayTokens(uint16 StateBits, TArray<FC
 {
 	OutTokens.Reset();
 
-	const uint16 DirectionBits = StateBits & DirectionMask;
+	const uint16 DirectionBits = StateBits & CombatForgeInput::DirectionMask;
 	switch (DirectionBits)
 	{
 	case static_cast<uint16>(ECombatForgeInputToken::Up):
@@ -150,7 +149,7 @@ void UCombatForgeInputTextLogger::AppendInputLogEntry(int32 Sequence, uint16 Sta
 		Line += FString::Printf(TEXT("  |  %s"), *FString::Join(MatchedNames, TEXT(", ")));
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("%s"), *Line);
+	UE_LOG(LogCombatForge, Log, TEXT("%s"), *Line);
 	if (OutputWidget != nullptr)
 	{
 		OutputWidget->AppendLogLine(Line);

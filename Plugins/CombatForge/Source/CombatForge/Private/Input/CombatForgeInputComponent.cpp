@@ -9,7 +9,7 @@
 
 namespace
 {
-	static constexpr uint16 DirectionMask = CombatForgeInput::DirectionMask;
+	static constexpr uint16 InputComponentDirectionMask = CombatForgeInput::DirectionMask;
 
 	static uint16 NormalizeDirectionalBits(uint16 DirectionBits)
 	{
@@ -51,7 +51,7 @@ namespace
 
 	static uint16 NormalizeStateBits(uint16 StateBits)
 	{
-		return static_cast<uint16>((StateBits & static_cast<uint16>(~DirectionMask)) | NormalizeDirectionalBits(StateBits & DirectionMask));
+		return static_cast<uint16>((StateBits & static_cast<uint16>(~InputComponentDirectionMask)) | NormalizeDirectionalBits(StateBits & InputComponentDirectionMask));
 	}
 }
 
@@ -240,7 +240,7 @@ bool UCombatForgeInputComponent::TryResolveTokenForAction(const UInputAction* In
 
 void UCombatForgeInputComponent::StepSimulation()
 {
-	const uint16 NewStateBits = static_cast<uint16>((CurrentButtonStateBits & static_cast<uint16>(~DirectionMask)) | QuantizeDirectionBits());
+	const uint16 NewStateBits = static_cast<uint16>((CurrentButtonStateBits & static_cast<uint16>(~InputComponentDirectionMask)) | QuantizeDirectionBits());
 	TArray<const FCombatForgeCommand*> Commands;
 	const bool bStateChanged = InputBuffer.Tick(NewStateBits, Commands);
 

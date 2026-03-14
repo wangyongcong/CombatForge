@@ -21,8 +21,8 @@ tags:
   - command-input
   - mugen
   - v2
-last_updated: 2026-03-11
-summary: Cardinal-only V2 combat input runtime that stores U/D/F/B in buffered state bits, infers diagonals during parsing and matching, and preserves MUGEN-style authored command strings.
+last_updated: 2026-03-14
+summary: Cardinal-only V2 combat input runtime that stores U/D/F/B in buffered state bits, uses exact cardinal press matching with explicit supersets, and preserves MUGEN-style authored command strings.
 ---
 
 # Combat Input Runtime - MUGEN Simplified
@@ -130,11 +130,31 @@ This means command intents are emitted only on input-change ticks.
   - unrelated inputs between elements are allowed
   - unless the next element is marked with `>`
 
+### Problems This Revision Solves
+- Before the exact-cardinal change, plain `D` and `F` also accepted `DF`.
+- That made motion paths ambiguous:
+  - `Hadoken`-style `D,DF,F+a`
+  - `Shoryuken`-style `F,D,DF+a`
+  - could both match the same diagonal-heavy history because `DF` could satisfy both `D` and `F`.
+- The result was that command identity was often determined by arbitration order rather than by the authored motion path.
+- Making plain cardinal presses exact fixes that ambiguity:
+  - `D` means exact `D`
+  - `F` means exact `F`
+  - diagonal leniency must be authored explicitly with `$`
+- This change exposed two practical motion-input issues that the matcher now handles explicitly:
+  - the first directional element in a motion often starts from an already-held state, so the first directional press element may match from held state
+  - quarter/circle motions often need a held cardinal to remain valid when the stick rolls into a neighboring diagonal, so held plain cardinals accept neighboring diagonals that preserve the held component
+- These exceptions are limited to directional motion ergonomics:
+  - later press elements remain exact
+  - non-directional press elements keep their original behavior
+  - explicit directional supersets still use `$`
+
 ### Direction Literal Semantics
 - Cardinal literals (`U`, `D`, `F`, `B`):
   - require their cardinal bit in the current state
-  - reject the opposite direction on the same axis
+  - reject any extra direction bits unless explicitly allowed with `$`
   - do not rely on stored diagonal bits
+  - exception: held plain cardinals accept neighboring diagonals that preserve the held component
 - Diagonal literals (`UB`, `UF`, `DB`, `DF`):
   - require both component cardinals on the same tick
   - are inferred from the stored cardinal state during parsing and matching
@@ -145,10 +165,24 @@ This means command intents are emitted only on input-change ticks.
 ### Per Element Types
 - `Press`
   - token becomes active on that tick
+  - exception: the first directional element in a command may match from an already-held state so motions can start from an existing direction hold
 - `Held`
   - token is active on that tick
+  - for plain cardinal directions, held checks accept neighboring diagonals on the orthogonal axis
 - `Release`
   - token was active on previous tick and is inactive on current tick
+
+Implications for common motions:
+- `F,D,DF+a`
+  - the first `F` may come from a held-forward state
+  - later `D` remains an exact down entry
+  - `DF+a` remains exact unless `$` is authored
+- `/D,DF,F+a`
+  - `/D` is evaluated on the `DF` anchor tick
+  - `/D` succeeds there because held plain cardinals accept neighboring diagonals
+- `D,DF,F+a`
+  - remains exact on its directional press steps
+  - if diagonal leniency is desired for a specific element, author it explicitly with `$`
 
 Held and release checks operate on cardinal bits:
 - inferred diagonal held states come from both component cardinals staying active
@@ -183,7 +217,7 @@ Interpretation:
   - required cardinal direction bits plus button bits
   - diagonals compile to multi-bit cardinal requirements
 - `AcceptedMask`
-  - additional cardinal direction bits allowed for inferred directional supersets such as `$D`
+  - additional cardinal direction bits allowed only for authored directional supersets such as `$D`
 - `MatchKind`
   - `Press`, `Held`, `Release`
 - `MinHeldFrames`
@@ -258,9 +292,9 @@ Command:
 D,DF,F
 ```
 Meaning:
-- press `D`
-- then press `D+F` on the same tick
-- then release `D` while `F` remains held or continue into pure `F`
+- enter the `D` direction sector
+- then enter the `DF` direction sector
+- then enter the `F` direction sector
 
 ## Current Implementation Shape
 ### Input Component
@@ -304,6 +338,9 @@ The current automated coverage is aimed at:
 - Full MUGEN deep-buffering behavior is not implemented.
 - The current system does not try to auto-fire a command that becomes valid without a new input change.
 - Stored history is intentionally compact: one normalized key-state per tick.
+- Directional motion ergonomics are handled by a few explicit exceptions instead of a full token-transition history:
+  - first directional press element may match from held state
+  - held plain cardinals may match neighboring diagonals
 
 ## Development Notes
 Areas to refine next:
@@ -312,3 +349,5 @@ Areas to refine next:
 - clarify exact behavior for `+` under fixed-step sampling
 - extend tests for more MUGEN command forms
 - decide whether later development should support deeper historical hold-state behavior beyond the current scope
+- 2026-03-11: cardinal literals are exact by default; use `$` when a command should also accept diagonal variants
+- 2026-03-14: added directional-motion exceptions so first directional press can start from held state and held plain cardinals remain valid on neighboring diagonals

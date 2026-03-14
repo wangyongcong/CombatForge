@@ -20,8 +20,8 @@ private:
 	bool TryMatchCommand(const FCombatForgeCommand& Command) const;
 	static bool IsCommandHigherPriority(const FCombatForgeCommand& A, const FCombatForgeCommand& B);
 	uint16 GetStateAtLogicalIndex(int32 LogicalIndex) const;
-	static int32 GetMinimumHeldTicks(const int32 HeldTicksByBit[16], uint16 Mask);
-	static bool MatchesElementState(uint16 StateBits, uint16 RequiredMask, uint16 AcceptedMask);
+	static int32 GetMinimumHeldTicks(const int32 HeldTicksByBit[16], int32 Mask);
+	static bool MatchesElementState(uint16 StateBits, int32 RequiredMask, int32 AcceptedMask);
 	bool HasInterveningChanges(int32 EarlierIndex, int32 LaterIndex) const;
 
 private:

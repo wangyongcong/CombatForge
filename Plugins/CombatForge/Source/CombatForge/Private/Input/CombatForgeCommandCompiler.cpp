@@ -4,7 +4,7 @@
 
 namespace
 {
-	static constexpr uint16 DirectionMask = CombatForgeInput::DirectionMask;
+	static constexpr uint16 CommandCompilerDirectionMask = CombatForgeInput::DirectionMask;
 	static constexpr uint16 VerticalMask =
 		static_cast<uint16>(ECombatForgeInputToken::Up) |
 		static_cast<uint16>(ECombatForgeInputToken::Down);
@@ -52,7 +52,7 @@ namespace
 		}
 	}
 
-	static bool TryParseBaseSymbol(const FString& Source, int32& Index, uint16& OutMask, bool& bOutIsDirection, FString& OutNormalized)
+	static bool TryParseBaseSymbol(const FString& Source, int32& Index, int32& OutMask, bool& bOutIsDirection, FString& OutNormalized)
 	{
 		if (TryConsumeLiteral(Source, Index, TEXT("UB")))
 		{
@@ -253,7 +253,7 @@ namespace
 					++Index;
 				}
 
-				uint16 ParsedMask = 0;
+				int32 ParsedMask = 0;
 				bool bIsDirection = false;
 				FString NormalizedToken;
 				if (!TryParseBaseSymbol(Source, Index, ParsedMask, bIsDirection, NormalizedToken))
