@@ -244,7 +244,7 @@ void UCombatForgeInputComponent::StepSimulation()
 	TArray<const FCombatForgeCommand*> Commands;
 	const bool bStateChanged = InputBuffer.Tick(NewStateBits, Commands);
 
-	if (bStateChanged)
+	if (bStateChanged || !Commands.IsEmpty())
 	{
 		const uint16 LoggedStateBits = NormalizeStateBits(NewStateBits);
 		if (InputLogger.GetInterface() != nullptr)

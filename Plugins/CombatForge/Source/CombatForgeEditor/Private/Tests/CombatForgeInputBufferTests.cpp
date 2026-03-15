@@ -121,6 +121,29 @@ bool FCombatForgeCommandDisplayNameHashStabilityTest::RunTest(const FString& Par
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeCommandCompilerLegacyStrictTokenRejectedTest,
+	"CombatForge.Input.Compiler.LegacyStrictTokenRejected",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeCommandCompilerLegacyStrictTokenRejectedTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.DefaultInputWindowFrames = 20;
+
+	FCombatForgeCommand Command;
+	Command.Id = 22;
+	Command.CommandString = TEXT("a,<b");
+
+	TArray<FCombatForgeCommand> Commands{ Command };
+	TArray<FCombatForgeCompileMessage> Messages;
+	const bool bCompileSucceeded = FCombatForgeCommandCompiler::CompileCommands(Settings, Commands, Messages);
+
+	TestFalse(TEXT("Legacy '<' strict token is rejected by the V2 compiler"), bCompileSucceeded);
+	TestTrue(TEXT("Compiler reports a validation error for legacy '<'"), Messages.Num() > 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FCombatForgeInputBufferDeterminismTest,
 	"CombatForge.Input.Buffer.WraparoundAndExpiry",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -291,6 +314,40 @@ bool FCombatForgeInputMugenReleaseAndChargeTest::RunTest(const FString& Paramete
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeInputHeldChargeTest,
+	"CombatForge.Input.Matcher.MugenHeldCharge",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeInputHeldChargeTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.BufferCapacity = 64;
+	Settings.DefaultInputWindowFrames = 40;
+
+	FCombatForgeCommand HeldCharge;
+	HeldCharge.Id = 51;
+	HeldCharge.CommandString = TEXT("/30a");
+	HeldCharge.InputWindowFrames = 40;
+
+	FCombatForgetInputBuffer InputBuffer;
+	InputBuffer.Configure(Settings, { HeldCharge });
+
+	TArray<const FCombatForgeCommand*> Intents;
+	for (int32 Tick = 0; Tick < 29; ++Tick)
+	{
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
+		TestEqual(TEXT("/30a does not complete before the hold threshold"), Intents.Num(), 0);
+	}
+
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
+	TestEqual(TEXT("/30a completes on the threshold tick without requiring a state change"), Intents.Num(), 1);
+
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
+	TestEqual(TEXT("/30a only emits once while the held state remains valid"), Intents.Num(), 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FCombatForgeInputMugenDirectionalSupersetTest,
 	"CombatForge.Input.Matcher.MugenDirectionalSuperset",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -388,96 +445,520 @@ bool FCombatForgeInputExactCardinalDirectionTest::RunTest(const FString& Paramet
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FCombatForgeInputHeldCardinalNeighborDiagonalTest,
-	"CombatForge.Input.Matcher.HeldCardinalAcceptsNeighborDiagonal",
+	FCombatForgeInputSimultaneousButtonsTest,
+	"CombatForge.Input.Matcher.SimultaneousButtons",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FCombatForgeInputHeldCardinalNeighborDiagonalTest::RunTest(const FString& Parameters)
+bool FCombatForgeInputSimultaneousButtonsTest::RunTest(const FString& Parameters)
 {
 	FCombatForgeInputRuntimeSettings Settings;
 	Settings.BufferCapacity = 16;
 	Settings.DefaultInputWindowFrames = 10;
 
-	FCombatForgeCommand QuarterCircle;
-	QuarterCircle.Id = 9;
-	QuarterCircle.CommandString = TEXT("/D,DF,F+a");
-	QuarterCircle.InputWindowFrames = 10;
+	FCombatForgeCommand Simultaneous;
+	Simultaneous.Id = 9;
+	Simultaneous.CommandString = TEXT("a+b");
+	Simultaneous.InputWindowFrames = 10;
 
 	FCombatForgetInputBuffer InputBuffer;
-	InputBuffer.Configure(Settings, { QuarterCircle });
+	InputBuffer.Configure(Settings, { Simultaneous });
 
 	TArray<const FCombatForgeCommand*> Intents;
 	CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
-	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
-	CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
-	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
 	CombatForgeInputTestHelpers::TickState(
 		InputBuffer,
-		static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+		static_cast<uint16>(ECombatForgeInputToken::A) | static_cast<uint16>(ECombatForgeInputToken::B),
 		Intents);
-	TestEqual(TEXT("/D succeeds on the DF anchor tick for quarter-circle motions"), Intents.Num(), 1);
+	TestEqual(TEXT("a+b matches when both buttons are pressed on the same tick"), Intents.Num(), 1);
 
-	FCombatForgeCommand ExactForwardAndButton;
-	ExactForwardAndButton.Id = 10;
-	ExactForwardAndButton.CommandString = TEXT("F+a");
-	ExactForwardAndButton.InputWindowFrames = 10;
-
-	FCombatForgetInputBuffer ExactForwardBuffer;
-	ExactForwardBuffer.Configure(Settings, { ExactForwardAndButton });
+	FCombatForgetInputBuffer StaggeredBuffer;
+	StaggeredBuffer.Configure(Settings, { Simultaneous });
 	Intents.Reset();
-	CombatForgeInputTestHelpers::TickState(ExactForwardBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(StaggeredBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(StaggeredBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
 	CombatForgeInputTestHelpers::TickState(
-		ExactForwardBuffer,
-		CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+		StaggeredBuffer,
+		0,
 		Intents);
-	TestEqual(TEXT("Press semantics remain exact for plain forward"), Intents.Num(), 0);
+	CombatForgeInputTestHelpers::TickState(StaggeredBuffer, static_cast<uint16>(ECombatForgeInputToken::B), Intents);
+	TestEqual(TEXT("a+b rejects separated button presses when the first button is no longer held"), Intents.Num(), 0);
 
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FCombatForgeInputFirstDirectionalPressAcceptsHeldStateTest,
-	"CombatForge.Input.Matcher.FirstDirectionalPressAcceptsHeldState",
+	FCombatForgeInputDirectionalMotionCoverageTest,
+	"CombatForge.Input.Matcher.DirectionalMotionCoverage",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FCombatForgeInputFirstDirectionalPressAcceptsHeldStateTest::RunTest(const FString& Parameters)
+bool FCombatForgeInputDirectionalMotionCoverageTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.BufferCapacity = 32;
+	Settings.DefaultInputWindowFrames = 20;
+
+	FCombatForgeCommand QuarterCircleForward;
+	QuarterCircleForward.Id = 70;
+	QuarterCircleForward.CommandString = TEXT("D,DF,F+a");
+	QuarterCircleForward.InputWindowFrames = 12;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { QuarterCircleForward });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Quarter-circle forward matches D,DF,F+a"), Intents.Num(), 1);
+	}
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { QuarterCircleForward });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownBack, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Back), Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Back) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Quarter-circle forward rejects the mirrored back motion"), Intents.Num(), 0);
+	}
+
+	FCombatForgeCommand HalfCircleForward;
+	HalfCircleForward.Id = 71;
+	HalfCircleForward.CommandString = TEXT("B,DB,D,DF,F+a");
+	HalfCircleForward.InputWindowFrames = 16;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { HalfCircleForward });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Back), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownBack, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Half-circle forward matches B,DB,D,DF,F+a"), Intents.Num(), 1);
+	}
+
+	FCombatForgeCommand FullCircle;
+	FullCircle.Id = 72;
+	FullCircle.CommandString = TEXT("D,DF,F,UF,U,UB,B,DB,D+a");
+	FullCircle.InputWindowFrames = 20;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { FullCircle });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::UpForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Up), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::UpBack, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Back), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownBack, Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Down) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Full circle matches a continuous 360 motion"), Intents.Num(), 1);
+	}
+
+	FCombatForgeCommand Clockwise;
+	Clockwise.Id = 73;
+	Clockwise.CommandString = TEXT("U,UF,F,DF,D,DB,B,UB,U+a");
+	Clockwise.InputWindowFrames = 20;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { Clockwise });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Up), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::UpForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownBack, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Back), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::UpBack, Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Up) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Clockwise motion matches U,UF,F,DF,D,DB,B,UB,U+a"), Intents.Num(), 1);
+	}
+
+	FCombatForgeCommand CounterClockwise;
+	CounterClockwise.Id = 74;
+	CounterClockwise.CommandString = TEXT("U,UB,B,DB,D,DF,F,UF,U+a");
+	CounterClockwise.InputWindowFrames = 20;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { CounterClockwise });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Up), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::UpBack, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Back), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownBack, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::UpForward, Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Up) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Counter-clockwise motion matches U,UB,B,DB,D,DF,F,UF,U+a"), Intents.Num(), 1);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeInputHadokenTest,
+	"CombatForge.Input.Matcher.Hadoken",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeInputHadokenTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.BufferCapacity = 16;
+	Settings.DefaultInputWindowFrames = 10;
+
+	FCombatForgeCommand Hadoken;
+	Hadoken.Id = 62;
+	Hadoken.CommandString = TEXT("/D,DF,F+a");
+	Hadoken.InputWindowFrames = 10;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { Hadoken });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
+		TestEqual(TEXT("Neutral does not complete Hadoken"), Intents.Num(), 0);
+
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		TestEqual(TEXT("Initial down starts the Hadoken hold guard without completion"), Intents.Num(), 0);
+
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		TestEqual(TEXT("Down-forward alone does not complete Hadoken"), Intents.Num(), 0);
+
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		TestEqual(TEXT("Forward alone does not complete Hadoken"), Intents.Num(), 0);
+
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Hadoken completes on the forward-plus-button tick"), Intents.Num(), 1);
+	}
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { Hadoken });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Hadoken tolerates repeated held ticks between motion steps"), Intents.Num(), 1);
+	}
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { Hadoken });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownBack, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Hadoken tolerates a brief opposite-side down-back wobble before the clean quarter-circle"), Intents.Num(), 1);
+	}
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { Hadoken });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Hadoken tolerates a final down-forward wobble before settling to forward-plus-button"), Intents.Num(), 1);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeInputShoryukenTest,
+	"CombatForge.Input.Matcher.Shoryuken",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeInputShoryukenTest::RunTest(const FString& Parameters)
 {
 	FCombatForgeInputRuntimeSettings Settings;
 	Settings.BufferCapacity = 16;
 	Settings.DefaultInputWindowFrames = 10;
 
 	FCombatForgeCommand DragonPunch;
-	DragonPunch.Id = 11;
+	DragonPunch.Id = 64;
 	DragonPunch.CommandString = TEXT("F,D,DF+a");
 	DragonPunch.InputWindowFrames = 10;
 
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { DragonPunch });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		TestEqual(TEXT("Initial forward starts Shoryuken without completion"), Intents.Num(), 0);
+
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		TestEqual(TEXT("Down-forward alone does not complete Shoryuken"), Intents.Num(), 0);
+
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		TestEqual(TEXT("Down advances the middle Shoryuken step without completion"), Intents.Num(), 0);
+
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		TestEqual(TEXT("Returning to down-forward keeps deeper Shoryuken progress"), Intents.Num(), 0);
+
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		TestEqual(TEXT("A later forward does not clobber the deeper Shoryuken progress"), Intents.Num(), 0);
+
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Shoryuken completes on the down-forward-plus-button tick"), Intents.Num(), 1);
+	}
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { DragonPunch });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Shoryuken tolerates repeated held ticks during the forward-to-down transition"), Intents.Num(), 1);
+	}
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { DragonPunch });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Shoryuken completes when the button is pressed directly on the second down-forward"), Intents.Num(), 1);
+	}
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { DragonPunch });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::UpForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Shoryuken tolerates a brief up-forward wobble before the clean forward-down motion"), Intents.Num(), 1);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeInputRestartFromFreshPrefixTest,
+	"CombatForge.Input.Matcher.RestartFromFreshPrefix",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeInputRestartFromFreshPrefixTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.BufferCapacity = 16;
+	Settings.DefaultInputWindowFrames = 10;
+
+	FCombatForgeCommand Command;
+	Command.Id = 61;
+	Command.CommandString = TEXT("a,b");
+	Command.InputWindowFrames = 10;
+
 	FCombatForgetInputBuffer InputBuffer;
-	InputBuffer.Configure(Settings, { DragonPunch });
+	InputBuffer.Configure(Settings, { Command });
 
 	TArray<const FCombatForgeCommand*> Intents;
 	CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
-	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
-	CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
-	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
+	TestEqual(TEXT("First a starts the sequence without immediate completion"), Intents.Num(), 0);
+
+	CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
+	TestEqual(TEXT("A fresher a restarts the prefix instead of timing out the command"), Intents.Num(), 0);
+
 	CombatForgeInputTestHelpers::TickState(
 		InputBuffer,
-		CombatForgeInputTestHelpers::DownForward | static_cast<uint16>(ECombatForgeInputToken::A),
+		static_cast<uint16>(ECombatForgeInputToken::A) | static_cast<uint16>(ECombatForgeInputToken::B),
 		Intents);
-	TestEqual(TEXT("First directional press element can match from held state"), Intents.Num(), 1);
+	TestEqual(TEXT("a,a,b still completes a,b by restarting from the fresher prefix"), Intents.Num(), 1);
+	return true;
+}
 
-	FCombatForgeCommand Buttons;
-	Buttons.Id = 12;
-	Buttons.CommandString = TEXT("a,b");
-	Buttons.InputWindowFrames = 10;
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeInputStreetFighterCommandCoverageTest,
+	"CombatForge.Input.Matcher.StreetFighterCommandCoverage",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-	FCombatForgetInputBuffer ButtonBuffer;
-	ButtonBuffer.Configure(Settings, { Buttons });
-	Intents.Reset();
-	CombatForgeInputTestHelpers::TickState(ButtonBuffer, 0, Intents);
-	CombatForgeInputTestHelpers::TickState(ButtonBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
-	CombatForgeInputTestHelpers::TickState(ButtonBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
-	CombatForgeInputTestHelpers::TickState(ButtonBuffer, static_cast<uint16>(ECombatForgeInputToken::A) | static_cast<uint16>(ECombatForgeInputToken::B), Intents);
-	TestEqual(TEXT("Non-directional first press semantics are unchanged"), Intents.Num(), 1);
+bool FCombatForgeInputStreetFighterCommandCoverageTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.BufferCapacity = 64;
+	Settings.DefaultInputWindowFrames = 40;
+
+	FCombatForgeCommand SonicBoom;
+	SonicBoom.Id = 80;
+	SonicBoom.CommandString = TEXT("~30B,F+a");
+	SonicBoom.InputWindowFrames = 40;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { SonicBoom });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		for (int32 Tick = 0; Tick < 30; ++Tick)
+		{
+			CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Back), Intents);
+		}
+		CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::A),
+			Intents);
+		TestEqual(TEXT("Guile Sonic Boom matches charge back, release, then forward plus punch"), Intents.Num(), 1);
+	}
+
+	FCombatForgeCommand SomersaultKick;
+	SomersaultKick.Id = 81;
+	SomersaultKick.CommandString = TEXT("~30D,U+b");
+	SomersaultKick.InputWindowFrames = 40;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { SomersaultKick });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		for (int32 Tick = 0; Tick < 30; ++Tick)
+		{
+			CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		}
+		CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Up) | static_cast<uint16>(ECombatForgeInputToken::B),
+			Intents);
+		TestEqual(TEXT("Guile Somersault Kick matches charge down, release, then up plus kick"), Intents.Num(), 1);
+	}
+
+	FCombatForgeCommand ShinkuHadoken;
+	ShinkuHadoken.Id = 82;
+	ShinkuHadoken.CommandString = TEXT("D,DF,F,D,DF,F+a+b");
+	ShinkuHadoken.InputWindowFrames = 24;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { ShinkuHadoken });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Down), Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, CombatForgeInputTestHelpers::DownForward, Intents);
+		CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Forward), Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Forward)
+				| static_cast<uint16>(ECombatForgeInputToken::A)
+				| static_cast<uint16>(ECombatForgeInputToken::B),
+			Intents);
+		TestEqual(TEXT("Ryu ultimate matches double quarter-circle forward plus two buttons"), Intents.Num(), 1);
+	}
+
+	FCombatForgeCommand Kikoken;
+	Kikoken.Id = 83;
+	Kikoken.CommandString = TEXT("~30B,F+x");
+	Kikoken.InputWindowFrames = 40;
+
+	{
+		FCombatForgetInputBuffer InputBuffer;
+		InputBuffer.Configure(Settings, { Kikoken });
+
+		TArray<const FCombatForgeCommand*> Intents;
+		for (int32 Tick = 0; Tick < 30; ++Tick)
+		{
+			CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::Back), Intents);
+		}
+		CombatForgeInputTestHelpers::TickState(InputBuffer, 0, Intents);
+		CombatForgeInputTestHelpers::TickState(
+			InputBuffer,
+			static_cast<uint16>(ECombatForgeInputToken::Forward) | static_cast<uint16>(ECombatForgeInputToken::X),
+			Intents);
+		TestEqual(TEXT("Chun-Li Kikoken matches charge back, release, then forward plus punch"), Intents.Num(), 1);
+	}
 
 	return true;
 }

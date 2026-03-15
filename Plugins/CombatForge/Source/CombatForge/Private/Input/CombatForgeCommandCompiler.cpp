@@ -225,6 +225,15 @@ namespace
 			{
 				bIsHeld = true;
 				++Index;
+				const int32 NumberStart = Index;
+				while (Index < Source.Len() && FChar::IsDigit(Source[Index]))
+				{
+					++Index;
+				}
+				if (NumberStart != Index)
+				{
+					Element.MinHeldFrames = FCString::Atoi(*Source.Mid(NumberStart, Index - NumberStart));
+				}
 			}
 			if (Index < Source.Len() && Source[Index] == TEXT('~'))
 			{
