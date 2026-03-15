@@ -3,6 +3,7 @@
 #include "Input/CombatForgeInputBuffer.h"
 #include "CombatForge.h"
 #include "Input/CombatForgeCommandCompiler.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 namespace
 {
@@ -148,7 +149,7 @@ namespace
 
 	static bool MatchesHeldElementState(uint16 StateBits, int32 RequiredMask, int32 AcceptedMask)
 	{
-		StateBits = NormalizeStateBits(StateBits);
+		checkSlow(StateBits == NormalizeStateBits(StateBits));
 		if ((static_cast<int32>(StateBits) & RequiredMask) != RequiredMask)
 		{
 			return false;
@@ -214,7 +215,10 @@ void FCombatForgetInputBuffer::ResetRuntimeState()
 	Head = 0;
 	Count = 0;
 	CurrentTick = 0;
+	CurrentStateBits = 0;
 	PreviousStateBits = 0;
+	PressedBits = 0;
+	ReleasedBits = 0;
 	bHasReceivedTick = false;
 	for (int32 BitIndex = 0; BitIndex < 16; ++BitIndex)
 	{
@@ -224,11 +228,13 @@ void FCombatForgetInputBuffer::ResetRuntimeState()
 
 bool FCombatForgetInputBuffer::Tick(uint16 StateBits, TArray<const FCombatForgeCommand*>& OutCommands)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE_STR("CombatForge.InputBuffer.Tick");
+
 	OutCommands.Reset();
 	++CurrentTick;
 	StateBits = NormalizeStateBits(StateBits);
 
-	const uint16 PreviousBits = PreviousStateBits;
+	const uint16 PreviousBits = CurrentStateBits;
 	const bool bStateChanged = StateBits != PreviousBits;
 	const int32 Capacity = Storage.Num();
 	if (Count < Capacity)
@@ -242,6 +248,11 @@ bool FCombatForgetInputBuffer::Tick(uint16 StateBits, TArray<const FCombatForgeC
 		Storage[Head] = StateBits;
 		Head = (Head + 1) % Capacity;
 	}
+
+	PreviousStateBits = PreviousBits;
+	CurrentStateBits = StateBits;
+	PressedBits = static_cast<uint16>(CurrentStateBits & ~PreviousStateBits);
+	ReleasedBits = static_cast<uint16>(PreviousStateBits & ~CurrentStateBits);
 
 	for (int32 BitIndex = 0; BitIndex < 16; ++BitIndex)
 	{
@@ -260,7 +271,6 @@ bool FCombatForgetInputBuffer::Tick(uint16 StateBits, TArray<const FCombatForgeC
 		}
 	}
 
-	PreviousStateBits = StateBits;
 	SolveCommands(bStateChanged, OutCommands);
 	bHasReceivedTick = true;
 	return bStateChanged;
@@ -278,6 +288,8 @@ void FCombatForgetInputBuffer::GetBufferedStates(TArray<uint16>& OutStates) cons
 
 void FCombatForgetInputBuffer::SolveCommands(bool bStateChanged, TArray<const FCombatForgeCommand*>& OutCommands)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE_STR("CombatForge.InputBuffer.SolveCommands");
+
 	for (int32 CommandIndex = 0; CommandIndex < Commands.Num(); ++CommandIndex)
 	{
 		FCommandRuntimeState& RuntimeState = CommandRuntimeStates[CommandIndex];
@@ -296,14 +308,20 @@ void FCombatForgetInputBuffer::SolveCommands(bool bStateChanged, TArray<const FC
 
 bool FCombatForgetInputBuffer::TryAdvanceCommand(const FCombatForgeCommand& Command, FCommandRuntimeState& RuntimeState, bool bStateChanged)
 {
-	if (Command.Elements.Num() <= 0)
+	TRACE_CPUPROFILER_EVENT_SCOPE_STR("CombatForge.InputBuffer.TryAdvanceCommand");
+
+	const int32 ElementCount = Command.Elements.Num();
+	if (ElementCount <= 0)
 	{
 		return false;
 	}
 
+	const FCombatForgeCommandElement& LastElement = Command.Elements.Last();
+
+	// Held-terminal commands emit once, then stay latched until the held condition stops matching.
 	if (RuntimeState.bLatchedComplete)
 	{
-		if (MatchesElementOnCurrentTick(Command.Elements.Last(), bStateChanged))
+		if (MatchesElementOnCurrentTick(LastElement, bStateChanged))
 		{
 			return false;
 		}
@@ -311,6 +329,7 @@ bool FCombatForgetInputBuffer::TryAdvanceCommand(const FCombatForgeCommand& Comm
 		RuntimeState.bLatchedComplete = false;
 	}
 
+	// Any partial sequence expires once it runs past its authored input window.
 	if (RuntimeState.NextStepIndex > 0 && RuntimeState.SequenceStartTick != INDEX_NONE)
 	{
 		const int32 ElapsedTicks = CurrentTick - RuntimeState.SequenceStartTick;
@@ -323,6 +342,7 @@ bool FCombatForgetInputBuffer::TryAdvanceCommand(const FCombatForgeCommand& Comm
 	if (RuntimeState.NextStepIndex > 0)
 	{
 		const FCombatForgeCommandElement& PendingElement = Command.Elements[RuntimeState.NextStepIndex];
+		// Strict steps must be the very next qualifying state change after the previous step.
 		if (PendingElement.bStrictAfterPrevious
 			&& bStateChanged
 			&& PendingElement.MatchKind != ECombatForgeCommandElementMatchKind::Held
@@ -332,14 +352,22 @@ bool FCombatForgetInputBuffer::TryAdvanceCommand(const FCombatForgeCommand& Comm
 		}
 	}
 
-	bool bAdvanced = false;
+	// Non-held steps cannot advance on a stable tick, so avoid re-evaluating them until input changes.
+	if (RuntimeState.NextStepIndex < ElementCount
+		&& !bStateChanged
+		&& Command.Elements[RuntimeState.NextStepIndex].MatchKind != ECombatForgeCommandElementMatchKind::Held)
+	{
+		return false;
+	}
+
 	bool bConsumedEventThisTick = false;
-	while (RuntimeState.NextStepIndex < Command.Elements.Num())
+	while (RuntimeState.NextStepIndex < ElementCount)
 	{
 		const FCombatForgeCommandElement& Element = Command.Elements[RuntimeState.NextStepIndex];
 		if (RuntimeState.NextStepIndex > 0)
 		{
 			const FCombatForgeCommandElement& PreviousElement = Command.Elements[RuntimeState.NextStepIndex - 1];
+			// If the previous step was a hold, it must remain valid while waiting for the next step.
 			if (PreviousElement.MatchKind == ECombatForgeCommandElementMatchKind::Held
 				&& !MatchesHeldElement(PreviousElement))
 			{
@@ -350,28 +378,12 @@ bool FCombatForgetInputBuffer::TryAdvanceCommand(const FCombatForgeCommand& Comm
 
 		if (bConsumedEventThisTick && Element.MatchKind != ECombatForgeCommandElementMatchKind::Held)
 		{
-			UE_LOG(
-				LogCombatForge,
-				Verbose,
-				TEXT("Command %d waiting at step %d because this tick already consumed an event"),
-				Command.Id,
-				RuntimeState.NextStepIndex);
+			// One press/release event can satisfy at most one non-held element per tick.
 			break;
 		}
 
 		const bool bMatched = MatchesElementOnCurrentTick(Element, bStateChanged);
-		UE_LOG(
-			LogCombatForge,
-			Verbose,
-			TEXT("Command %d step %d %s on tick %d current=%s changed=%s matched=%s"),
-			Command.Id,
-			RuntimeState.NextStepIndex,
-			*DescribeElement(Element),
-			CurrentTick,
-			*FormatStateBitsForLog(PreviousStateBits),
-			bStateChanged ? TEXT("true") : TEXT("false"),
-			bMatched ? TEXT("true") : TEXT("false"));
-
+		
 		if (!bMatched)
 		{
 			break;
@@ -384,16 +396,16 @@ bool FCombatForgetInputBuffer::TryAdvanceCommand(const FCombatForgeCommand& Comm
 
 		RuntimeState.LastMatchedTick = CurrentTick;
 		++RuntimeState.NextStepIndex;
-		bAdvanced = true;
 		if (Element.MatchKind != ECombatForgeCommandElementMatchKind::Held)
 		{
+			// Held elements may chain into later checks on the same tick; press/release elements may not.
 			bConsumedEventThisTick = true;
 		}
 	}
 
-	if (RuntimeState.NextStepIndex >= Command.Elements.Num())
+	if (RuntimeState.NextStepIndex >= ElementCount)
 	{
-		const bool bLatchCompletion = Command.Elements.Last().MatchKind == ECombatForgeCommandElementMatchKind::Held;
+		const bool bLatchCompletion = LastElement.MatchKind == ECombatForgeCommandElementMatchKind::Held;
 		ResetCommandRuntimeState(RuntimeState);
 		RuntimeState.bCompletedThisTick = true;
 		RuntimeState.bLatchedComplete = bLatchCompletion;
@@ -436,16 +448,27 @@ uint16 FCombatForgetInputBuffer::GetStateAtLogicalIndex(int32 LogicalIndex) cons
 
 int32 FCombatForgetInputBuffer::GetMinimumHeldTicks(int32 Mask) const
 {
-	int32 MinimumHeldTicks = TNumericLimits<int32>::Max();
-	for (int32 BitIndex = 0; BitIndex < 16; ++BitIndex)
+	TRACE_CPUPROFILER_EVENT_SCOPE_STR("CombatForge.InputBuffer.GetMinimumHeldTicks");
+
+	if (Mask == 0)
 	{
-		const uint16 BitMask = static_cast<uint16>(1u << BitIndex);
-		if ((Mask & BitMask) == 0)
+		return 0;
+	}
+
+	int32 MinimumHeldTicks = TNumericLimits<int32>::Max();
+	uint32 Remaining = static_cast<uint32>(Mask) & 0xffffu;
+	while (Remaining != 0)
+	{
+		const uint32 BitIndex = FMath::CountTrailingZeros(Remaining);
+		Remaining &= (Remaining - 1);
+
+		const int32 HeldTicks = FMath::Max(0, static_cast<int32>(TokenStates[BitIndex].Age));
+		if (HeldTicks == 0)
 		{
-			continue;
+			return 0;
 		}
 
-		MinimumHeldTicks = FMath::Min(MinimumHeldTicks, FMath::Max(0, static_cast<int32>(TokenStates[BitIndex].Age)));
+		MinimumHeldTicks = FMath::Min(MinimumHeldTicks, HeldTicks);
 	}
 
 	return MinimumHeldTicks == TNumericLimits<int32>::Max() ? 0 : MinimumHeldTicks;
@@ -453,16 +476,27 @@ int32 FCombatForgetInputBuffer::GetMinimumHeldTicks(int32 Mask) const
 
 int32 FCombatForgetInputBuffer::GetMinimumPreviousHeldTicks(int32 Mask) const
 {
-	int32 MinimumHeldTicks = TNumericLimits<int32>::Max();
-	for (int32 BitIndex = 0; BitIndex < 16; ++BitIndex)
+	TRACE_CPUPROFILER_EVENT_SCOPE_STR("CombatForge.InputBuffer.GetMinimumPreviousHeldTicks");
+
+	if (Mask == 0)
 	{
-		const uint16 BitMask = static_cast<uint16>(1u << BitIndex);
-		if ((Mask & BitMask) == 0)
+		return 0;
+	}
+
+	int32 MinimumHeldTicks = TNumericLimits<int32>::Max();
+	uint32 Remaining = static_cast<uint32>(Mask) & 0xffffu;
+	while (Remaining != 0)
+	{
+		const uint32 BitIndex = FMath::CountTrailingZeros(Remaining);
+		Remaining &= (Remaining - 1);
+
+		const int32 HeldTicks = FMath::Max(0, static_cast<int32>(TokenStates[BitIndex].PreviousAge));
+		if (HeldTicks == 0)
 		{
-			continue;
+			return 0;
 		}
 
-		MinimumHeldTicks = FMath::Min(MinimumHeldTicks, FMath::Max(0, static_cast<int32>(TokenStates[BitIndex].PreviousAge)));
+		MinimumHeldTicks = FMath::Min(MinimumHeldTicks, HeldTicks);
 	}
 
 	return MinimumHeldTicks == TNumericLimits<int32>::Max() ? 0 : MinimumHeldTicks;
@@ -470,7 +504,7 @@ int32 FCombatForgetInputBuffer::GetMinimumPreviousHeldTicks(int32 Mask) const
 
 bool FCombatForgetInputBuffer::MatchesElementState(uint16 StateBits, int32 RequiredMask, int32 AcceptedMask)
 {
-	StateBits = NormalizeStateBits(StateBits);
+	checkSlow(StateBits == NormalizeStateBits(StateBits));
 	if ((static_cast<int32>(StateBits) & RequiredMask) != RequiredMask)
 	{
 		return false;
@@ -490,7 +524,7 @@ bool FCombatForgetInputBuffer::MatchesElementState(uint16 StateBits, int32 Requi
 
 bool FCombatForgetInputBuffer::MatchesHeldElement(const FCombatForgeCommandElement& Element) const
 {
-	if (!MatchesHeldElementState(PreviousStateBits, Element.RequiredMask, Element.AcceptedMask))
+	if (!MatchesHeldElementState(CurrentStateBits, Element.RequiredMask, Element.AcceptedMask))
 	{
 		return false;
 	}
@@ -508,13 +542,17 @@ bool FCombatForgetInputBuffer::MatchesPressElement(const FCombatForgeCommandElem
 		return false;
 	}
 
-	const uint16 CurrentState = PreviousStateBits;
-	const uint16 PreviousState = Count >= 2 ? GetStateAtLogicalIndex(Count - 2) : 0;
-	if (!MatchesElementState(CurrentState, Element.RequiredMask, Element.AcceptedMask))
+	if (!IsDirectionalElement(Element)
+		&& (PressedBits & static_cast<uint16>(Element.RequiredMask)) == 0)
 	{
 		return false;
 	}
-	return !MatchesElementState(PreviousState, Element.RequiredMask, Element.AcceptedMask);
+
+	if (!MatchesElementState(CurrentStateBits, Element.RequiredMask, Element.AcceptedMask))
+	{
+		return false;
+	}
+	return !MatchesElementState(PreviousStateBits, Element.RequiredMask, Element.AcceptedMask);
 }
 
 bool FCombatForgetInputBuffer::MatchesReleaseElement(const FCombatForgeCommandElement& Element, bool bStateChanged) const
@@ -524,18 +562,16 @@ bool FCombatForgetInputBuffer::MatchesReleaseElement(const FCombatForgeCommandEl
 		return false;
 	}
 
-	const uint16 CurrentState = PreviousStateBits;
-	uint16 PreviousState = 0;
-	if (Count >= 2)
-	{
-		PreviousState = GetStateAtLogicalIndex(Count - 2);
-	}
-
-	if (!MatchesElementState(PreviousState, Element.RequiredMask, Element.AcceptedMask))
+	if ((ReleasedBits & static_cast<uint16>(Element.RequiredMask)) == 0)
 	{
 		return false;
 	}
-	if (MatchesElementState(CurrentState, Element.RequiredMask, Element.AcceptedMask))
+
+	if (!MatchesElementState(PreviousStateBits, Element.RequiredMask, Element.AcceptedMask))
+	{
+		return false;
+	}
+	if (MatchesElementState(CurrentStateBits, Element.RequiredMask, Element.AcceptedMask))
 	{
 		return false;
 	}

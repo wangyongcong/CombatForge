@@ -27,6 +27,7 @@ private:
 		int32 SequenceStartTick = INDEX_NONE;
 		int32 LastMatchedTick = INDEX_NONE;
 		bool bCompletedThisTick = false;
+		// Prevents held-terminal commands from re-emitting every tick until the held condition breaks.
 		bool bLatchedComplete = false;
 	};
 
@@ -52,7 +53,10 @@ private:
 	int32 Head = 0;
 	int32 Count = 0;
 	int32 CurrentTick = 0;
+	uint16 CurrentStateBits = 0;
 	uint16 PreviousStateBits = 0;
+	uint16 PressedBits = 0;
+	uint16 ReleasedBits = 0;
 	FTokenRuntimeState TokenStates[16] = {};
 	bool bHasReceivedTick = false;
 	TArray<FString> DebugRejections;

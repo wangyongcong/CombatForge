@@ -348,6 +348,48 @@ bool FCombatForgeInputHeldChargeTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeInputHeldMinimumAcrossTokensTest,
+	"CombatForge.Input.Matcher.HeldMinimumAcrossTokens",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeInputHeldMinimumAcrossTokensTest::RunTest(const FString& Parameters)
+{
+	FCombatForgeInputRuntimeSettings Settings;
+	Settings.BufferCapacity = 32;
+	Settings.DefaultInputWindowFrames = 20;
+
+	FCombatForgeCommand HeldPair;
+	HeldPair.Id = 52;
+	HeldPair.CommandString = TEXT("/3a+b");
+	HeldPair.InputWindowFrames = 20;
+
+	FCombatForgetInputBuffer InputBuffer;
+	InputBuffer.Configure(Settings, { HeldPair });
+
+	TArray<const FCombatForgeCommand*> Intents;
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
+	CombatForgeInputTestHelpers::TickState(InputBuffer, static_cast<uint16>(ECombatForgeInputToken::A), Intents);
+	CombatForgeInputTestHelpers::TickState(
+		InputBuffer,
+		static_cast<uint16>(ECombatForgeInputToken::A) | static_cast<uint16>(ECombatForgeInputToken::B),
+		Intents);
+	TestEqual(TEXT("/3a+b does not complete until the newest held token reaches the threshold"), Intents.Num(), 0);
+
+	CombatForgeInputTestHelpers::TickState(
+		InputBuffer,
+		static_cast<uint16>(ECombatForgeInputToken::A) | static_cast<uint16>(ECombatForgeInputToken::B),
+		Intents);
+	TestEqual(TEXT("/3a+b still waits while the minimum held token age is below the threshold"), Intents.Num(), 0);
+
+	CombatForgeInputTestHelpers::TickState(
+		InputBuffer,
+		static_cast<uint16>(ECombatForgeInputToken::A) | static_cast<uint16>(ECombatForgeInputToken::B),
+		Intents);
+	TestEqual(TEXT("/3a+b completes once all required tokens satisfy the held threshold"), Intents.Num(), 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FCombatForgeInputMugenDirectionalSupersetTest,
 	"CombatForge.Input.Matcher.MugenDirectionalSuperset",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
