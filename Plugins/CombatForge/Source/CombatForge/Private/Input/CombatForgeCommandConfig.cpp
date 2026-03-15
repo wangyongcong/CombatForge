@@ -61,6 +61,31 @@ bool UCombatForgeCommandConfig::IsCompileCurrent() const
 }
 
 #if WITH_EDITOR
+void UCombatForgeCommandConfig::EnsureUniqueCommandIds()
+{
+	int32 NextGeneratedId = 1;
+	for (const FCombatForgeCommand& Command : Commands)
+	{
+		if (Command.Id >= NextGeneratedId)
+		{
+			NextGeneratedId = Command.Id + 1;
+		}
+	}
+
+	TSet<int32> SeenIds;
+	for (FCombatForgeCommand& Command : Commands)
+	{
+		if (Command.Id > 0 && !SeenIds.Contains(Command.Id))
+		{
+			SeenIds.Add(Command.Id);
+			continue;
+		}
+
+		Command.Id = NextGeneratedId++;
+		SeenIds.Add(Command.Id);
+	}
+}
+
 void UCombatForgeCommandConfig::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
@@ -71,6 +96,11 @@ void UCombatForgeCommandConfig::PostEditChangeProperty(FPropertyChangedEvent& Pr
 	const FName PropertyName = PropertyChangedEvent.GetMemberPropertyName();
 	if (PropertyName == RuntimeSettingsName || PropertyName == CommandsName)
 	{
+		if (PropertyName == CommandsName)
+		{
+			EnsureUniqueCommandIds();
+		}
+
 		bCompileSucceeded = false;
 		CompileErrorMessage.Reset();
 	}

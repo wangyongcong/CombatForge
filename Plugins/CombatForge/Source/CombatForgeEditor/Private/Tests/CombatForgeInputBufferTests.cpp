@@ -95,6 +95,44 @@ bool FCombatForgeCommandConfigCacheValidityTest::RunTest(const FString& Paramete
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCombatForgeCommandConfigAutoAssignIdsTest,
+	"CombatForge.Input.Config.AutoAssignIds",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCombatForgeCommandConfigAutoAssignIdsTest::RunTest(const FString& Parameters)
+{
+	UCombatForgeCommandConfig* Config = NewObject<UCombatForgeCommandConfig>();
+
+	FCombatForgeCommand Existing;
+	Existing.Id = 7;
+	Existing.CommandString = TEXT("a");
+
+	FCombatForgeCommand MissingId;
+	MissingId.Id = 0;
+	MissingId.CommandString = TEXT("b");
+
+	FCombatForgeCommand DuplicateId;
+	DuplicateId.Id = 7;
+	DuplicateId.CommandString = TEXT("c");
+
+	Config->Commands = { Existing, MissingId, DuplicateId };
+
+	FProperty* CommandsProperty = FindFProperty<FProperty>(
+		UCombatForgeCommandConfig::StaticClass(),
+		GET_MEMBER_NAME_CHECKED(UCombatForgeCommandConfig, Commands));
+	TestNotNull(TEXT("Commands property exists for editor change notifications"), CommandsProperty);
+
+	FPropertyChangedEvent ChangeEvent(CommandsProperty);
+	Config->PostEditChangeProperty(ChangeEvent);
+
+	TestEqual(TEXT("Existing valid ids remain stable"), Config->Commands[0].Id, 7);
+	TestEqual(TEXT("Missing ids are assigned after the current max id"), Config->Commands[1].Id, 8);
+	TestEqual(TEXT("Duplicate ids are reassigned uniquely"), Config->Commands[2].Id, 9);
+	TestFalse(TEXT("Editing commands invalidates cached compilation"), Config->bCompileSucceeded);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FCombatForgeCommandDisplayNameHashStabilityTest,
 	"CombatForge.Input.Compiler.DisplayNameIgnoredByHash",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

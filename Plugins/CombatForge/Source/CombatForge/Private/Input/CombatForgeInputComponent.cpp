@@ -3,6 +3,7 @@
 #include "Input/CombatForgeInputComponent.h"
 #include "CombatForge.h"
 #include "Input/CombatForgeCommandConfig.h"
+#include "Input/CombatForgeInputUtility.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
@@ -10,49 +11,6 @@
 namespace
 {
 	static constexpr uint16 InputComponentDirectionMask = CombatForgeInput::DirectionMask;
-
-	static uint16 NormalizeDirectionalBits(uint16 DirectionBits)
-	{
-		bool bUp = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Up)) != 0;
-		bool bDown = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Down)) != 0;
-		bool bForward = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Forward)) != 0;
-		bool bBack = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Back)) != 0;
-
-		if (bUp && bDown)
-		{
-			bUp = false;
-			bDown = false;
-		}
-		if (bForward && bBack)
-		{
-			bForward = false;
-			bBack = false;
-		}
-
-		uint16 Result = 0;
-		if (bUp)
-		{
-			Result |= static_cast<uint16>(ECombatForgeInputToken::Up);
-		}
-		if (bDown)
-		{
-			Result |= static_cast<uint16>(ECombatForgeInputToken::Down);
-		}
-		if (bForward)
-		{
-			Result |= static_cast<uint16>(ECombatForgeInputToken::Forward);
-		}
-		if (bBack)
-		{
-			Result |= static_cast<uint16>(ECombatForgeInputToken::Back);
-		}
-		return Result;
-	}
-
-	static uint16 NormalizeStateBits(uint16 StateBits)
-	{
-		return static_cast<uint16>((StateBits & static_cast<uint16>(~InputComponentDirectionMask)) | NormalizeDirectionalBits(StateBits & InputComponentDirectionMask));
-	}
 }
 
 UCombatForgeInputComponent::UCombatForgeInputComponent()
@@ -246,7 +204,7 @@ void UCombatForgeInputComponent::StepSimulation()
 
 	if (bStateChanged || !Commands.IsEmpty())
 	{
-		const uint16 LoggedStateBits = NormalizeStateBits(NewStateBits);
+		const uint16 LoggedStateBits = CombatForgeInput::NormalizeStateBits(NewStateBits);
 		if (InputLogger.GetInterface() != nullptr)
 		{
 			InputLogger->AddInputLogEntry(++DebugSequenceCounter, LoggedStateBits, Commands);

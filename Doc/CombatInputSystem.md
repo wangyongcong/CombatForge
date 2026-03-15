@@ -22,7 +22,7 @@ tags:
   - mugen
   - v2
 last_updated: 2026-03-14
-summary: Cardinal-only V2 combat input runtime that stores U/D/F/B in buffered state bits, uses exact cardinal press matching with explicit supersets, and preserves MUGEN-style authored command strings.
+summary: Cardinal-only V2 combat input runtime that normalizes U/D/F/B into state bits, tracks per-token signed ages for incremental command progression, uses exact cardinal press matching with explicit supersets, and preserves MUGEN-style authored command strings.
 ---
 
 # Combat Input Runtime - MUGEN Simplified
@@ -34,9 +34,9 @@ Goals:
 - align command semantics with MUGEN where intentionally supported
 - keep runtime deterministic and fixed-step
 - simplify buffering and matching
-- only evaluate commands when input state changes
+- emit command intents only when they become newly complete on the current tick
 
-This design supersedes the earlier token-transition matcher for ongoing development.
+This design supersedes the earlier anchor-based backward matcher for ongoing development.
 
 ## Input Model
 - The runtime uses a 16-bit input state.
@@ -50,37 +50,45 @@ This design supersedes the earlier token-transition matcher for ongoing developm
   - directions are uppercase: `U, UB, B, DB, D, DF, F, UF`
   - face buttons are lowercase: `x, y, z, a, b, c`
 
-### Direction Normalization Before Buffering
+### Direction Normalization Before State Tracking
 - Facing-relative horizontal resolves to either `F` or `B`, never both.
 - Vertical resolves to either `U` or `D`, never both.
-- Opposite pairs are canceled before the state enters the buffer.
-- Buffered states store only the normalized cardinal state.
+- Opposite pairs are canceled before the state enters runtime tracking.
+- Runtime state stores only the normalized cardinal state.
 
-## Fixed-Step Buffer
+## Fixed-Step Runtime
 - The input component samples current state on each fixed-step tick.
-- The buffer stores one `uint16` state per tick.
-- No per-tick transition payload is stored.
-- Buffer is a fixed-size ring of recent per-tick states.
-- `InputWindowFrames` means: inspect only the last `N` ticks for a command.
+- The matcher source of truth is per-token signed age state, not backward history scans.
+- The runtime may keep a compact snapshot ring for debug visibility, but matching does not depend on it.
 
-Current runtime state owned by the buffer:
+Current matcher state owned by the runtime:
 - `CurrentTick`
+- `CurrentStateBits`
 - `PreviousStateBits`
-- `HeldTicksByBit[16]`
+- `TokenStates[16]`
+  - `Age > 0` means held for `N` ticks
+  - `Age < 0` means released for `N` ticks
+  - `Age == 1` means newly pressed this tick
+  - `Age == -1` means newly released this tick
+- per-command progress state
+  - next step index
+  - sequence start tick
+  - last matched tick
+  - held-completion latch, when needed
 
 Why:
-- command matching is only triggered when state changes
-- charge/release semantics need persistent per-bit timing state
-- old press states may expire, so hold timing cannot rely only on backward scanning
+- press / hold / release / charge semantics can be queried directly from token ages
+- commands can advance incrementally without backward scanning
+- `~30a` and `/30a` are both natural under the same token-age model
+- this is closer in spirit to Ikemen-GO's input age-state approach while preserving CombatForge's own directional and arbitration rules
 
 ## Matching Trigger
-- The buffer ticks every fixed step.
-- Command solving only runs when `CurrentStateBits != PreviousStateBits`.
-- When state does not change:
-  - state is still buffered
-  - commands are not evaluated
-
-This means command intents are emitted only on input-change ticks.
+- The runtime ticks every fixed step.
+- Commands may advance on any fixed tick if their next required step is satisfied.
+- Press and release steps still require a changed tick.
+- Held-only completions may occur on a quiet tick once the held condition becomes valid.
+- A command intent is emitted only when the command becomes newly complete on the current tick.
+- Held-final commands are latched until their final held condition becomes false so they do not re-fire every tick.
 
 ## Command Semantics
 ### Supported MUGEN Operators
@@ -90,6 +98,9 @@ This means command intents are emitted only on input-change ticks.
 - `/`
   - held requirement
   - example: `/a,b` means `a` must still be down when `b` is pressed
+- `/N`
+  - held charge requirement
+  - example: `/30a` means `a` has been held for at least 30 ticks
 - `~`
   - release requirement
   - example: `~a,b` means release `a`, then press `b`
@@ -100,8 +111,10 @@ This means command intents are emitted only on input-change ticks.
   - directional superset
   - example: `$D` matches `D`, `DB`, `DF`
 - `+`
-  - same-step combined input requirement
-  - example: `a+b`
+    - combined input requirement on one changed sampled state
+    - all tokens must be down on the matching tick
+    - one token may already be held if the full combination becomes newly satisfied on that tick
+    - example: `a+b`
 - `>`
   - strict adjacency
   - no intervening input-state changes between adjacent command elements
@@ -120,12 +133,16 @@ This means command intents are emitted only on input-change ticks.
 
 ## Matching Rules
 ### General
-- Matching is anchored on the latest changed tick.
-- The latest command element must match the newest buffered changed state.
-- Earlier elements are searched backward within the command window.
+- Matching is incremental, forward-only progression.
+- Each command owns explicit partial progress state.
+- Commands do not search backward through buffered history.
+- A command advances only when its next legal step matches on the current tick.
+- Earlier partial progress remains alive until timeout or invalidation; there is no generic restart from step 0.
 - Candidate ordering is deterministic:
   - higher priority first
   - longer element sequence second
+  - smaller timing slack third
+  - lower command id fourth
 - Default behavior is MUGEN-like leniency:
   - unrelated inputs between elements are allowed
   - unless the next element is marked with `>`
@@ -142,10 +159,9 @@ This means command intents are emitted only on input-change ticks.
   - `F` means exact `F`
   - diagonal leniency must be authored explicitly with `$`
 - This change exposed two practical motion-input issues that the matcher now handles explicitly:
-  - the first directional element in a motion often starts from an already-held state, so the first directional press element may match from held state
   - quarter/circle motions often need a held cardinal to remain valid when the stick rolls into a neighboring diagonal, so held plain cardinals accept neighboring diagonals that preserve the held component
 - These exceptions are limited to directional motion ergonomics:
-  - later press elements remain exact
+  - press elements remain exact
   - non-directional press elements keep their original behavior
   - explicit directional supersets still use `$`
 
@@ -165,21 +181,21 @@ This means command intents are emitted only on input-change ticks.
 ### Per Element Types
 - `Press`
   - token becomes active on that tick
-  - exception: the first directional element in a command may match from an already-held state so motions can start from an existing direction hold
 - `Held`
   - token is active on that tick
   - for plain cardinal directions, held checks accept neighboring diagonals on the orthogonal axis
+  - may also include a minimum hold duration such as `/30a`
 - `Release`
   - token was active on previous tick and is inactive on current tick
+  - may also include a minimum pre-release hold duration such as `~30a`
 
 Implications for common motions:
 - `F,D,DF+a`
-  - the first `F` may come from a held-forward state
-  - later `D` remains an exact down entry
+  - `F`, `D`, and `DF+a` all remain exact event steps unless `$` is authored
   - `DF+a` remains exact unless `$` is authored
 - `/D,DF,F+a`
-  - `/D` is evaluated on the `DF` anchor tick
-  - `/D` succeeds there because held plain cardinals accept neighboring diagonals
+  - `/D` remains valid while the stick rolls through `DF`
+  - later `DF` and `F+a` advance the sequence without resetting earlier partial progress
 - `D,DF,F+a`
   - remains exact on its directional press steps
   - if diagonal leniency is desired for a specific element, author it explicitly with `$`
@@ -191,14 +207,13 @@ Held and release checks operate on cardinal bits:
 
 ### Strict Adjacency
 - If an element has `bStrictAfterPrevious = true`:
-  - no intervening state changes are allowed between the earlier matched element and the later one
-- Strict adjacency keys off actual buffered state changes, not inferred directional-token artifacts
+  - the next strict event step must match on the immediately next eligible changed tick after the previous matched step
+- Strict adjacency keys off actual normalized state changes, not inferred directional-token artifacts
 
 ### Charge
-- Only charge-then-release is in scope
+- Held-charge and charge-release are both in scope
+- `/30a` is supported
 - `~30a` is supported
-- Current simplification:
-  - release-charge matching is reliable when the charged release is the latest triggering input
 
 ## Current Parser Model
 Each command string compiles into:
@@ -221,7 +236,7 @@ Interpretation:
 - `MatchKind`
   - `Press`, `Held`, `Release`
 - `MinHeldFrames`
-  - used for charge-release
+  - used for held-charge and charge-release
 - `bStrictAfterPrevious`
   - used for `>`
 
@@ -301,53 +316,59 @@ Meaning:
 `UCombatForgeInputComponent` is responsible for:
 - maintaining current button bits from `InputAction` start/completion
 - converting 2D stick input into normalized facing-relative cardinal bits each fixed step
-- feeding the current 16-bit state into the buffer
+- feeding the current 16-bit state into the runtime matcher
 - broadcasting raw state bits + matched commands only when state changed
 
-### Input Buffer
+### Input Runtime
 `FCombatForgetInputBuffer` is responsible for:
-- fixed-size per-tick state ring buffer
 - direction normalization safety for incoming states
 - command string compilation
-- per-bit hold timing
-- inferred-direction MUGEN-style command matching
-- deterministic candidate sorting by priority, then element count
+- per-token signed age tracking
+- per-command incremental progression
+- compact debug snapshot storage
+- deterministic candidate sorting by priority, then element count, then slack, then id
 
 ## Debug Expectations
-- The raw timeline shows stored cardinal state bits.
+- The raw timeline shows normalized cardinal state bits.
+- A compact snapshot may store:
+  - `StateBits`
+  - `ChangedBits`
 - Debug or match traces may also show an inferred 8-way direction label for readability.
-- Candidate rejection reasons should continue to describe parser or matcher failures deterministically.
+- Command progression traces should be able to show:
+  - current step index
+  - matched / waiting status
+  - completion this tick
+  - invalidation or timeout reasons
 
 ## Current Tests
 The current automated coverage is aimed at:
-- fixed ring history behavior
 - parser compilation for diagonal literals and directional supersets
 - `a,b`
 - `/a,b`
+- `/30a`
 - `a,>b`
 - `~a,b`
 - `~30a`
-- `D,DF,F`
+- `Hadoken`-style `/D,DF,F+a`
+- `Shoryuken`-style `F,D,DF+a`
 - derived diagonal hold/release behavior from cardinal states
 - opposite-direction normalization and facing-relative quantization
+- realistic motion-input noise around authored motions
 - replay determinism for equivalent cardinal streams
 
 ## Known Simplifications
-- Matching only happens on state changes.
-- Only charge-then-release is considered for now.
+- Only one partial progress path is currently tracked per command.
 - Full MUGEN deep-buffering behavior is not implemented.
-- The current system does not try to auto-fire a command that becomes valid without a new input change.
-- Stored history is intentionally compact: one normalized key-state per tick.
-- Directional motion ergonomics are handled by a few explicit exceptions instead of a full token-transition history:
-  - first directional press element may match from held state
-  - held plain cardinals may match neighboring diagonals
+- The runtime may keep compact snapshots for debug, but matching does not use a full backward history scan.
+- Motion ergonomics currently rely on held-cardinal diagonal tolerance rather than broader directional restart heuristics.
+- Raw state display shown only on changed ticks can hide the exact per-tick sampled path; full per-tick traces are still useful when diagnosing live input issues.
 
 ## Development Notes
 Areas to refine next:
 - verify full compile correctness in UE/MSBuild
 - tighten parser validation and error reporting
-- clarify exact behavior for `+` under fixed-step sampling
 - extend tests for more MUGEN command forms
-- decide whether later development should support deeper historical hold-state behavior beyond the current scope
+- decide whether future versions should support multiple concurrent partial paths per command
 - 2026-03-11: cardinal literals are exact by default; use `$` when a command should also accept diagonal variants
-- 2026-03-14: added directional-motion exceptions so first directional press can start from held state and held plain cardinals remain valid on neighboring diagonals
+- 2026-03-14: replaced the anchor-based backward matcher with token-age incremental progression inspired by Ikemen-GO's input age-state model
+- 2026-03-14: removed generic restart-from-first-step behavior because it clobbered deeper motion progress for commands such as Shoryuken

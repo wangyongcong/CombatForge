@@ -3,6 +3,7 @@
 #include "Input/CombatForgeInputBuffer.h"
 #include "CombatForge.h"
 #include "Input/CombatForgeCommandCompiler.h"
+#include "Input/CombatForgeInputUtility.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
 namespace
@@ -15,52 +16,9 @@ namespace
 		static_cast<uint16>(ECombatForgeInputToken::Forward) |
 		static_cast<uint16>(ECombatForgeInputToken::Back);
 
-	static uint16 NormalizeDirectionalBits(uint16 DirectionBits)
-	{
-		bool bUp = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Up)) != 0;
-		bool bDown = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Down)) != 0;
-		bool bForward = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Forward)) != 0;
-		bool bBack = (DirectionBits & static_cast<uint16>(ECombatForgeInputToken::Back)) != 0;
-
-		if (bUp && bDown)
-		{
-			bUp = false;
-			bDown = false;
-		}
-		if (bForward && bBack)
-		{
-			bForward = false;
-			bBack = false;
-		}
-
-		uint16 Result = 0;
-		if (bUp)
-		{
-			Result |= static_cast<uint16>(ECombatForgeInputToken::Up);
-		}
-		if (bDown)
-		{
-			Result |= static_cast<uint16>(ECombatForgeInputToken::Down);
-		}
-		if (bForward)
-		{
-			Result |= static_cast<uint16>(ECombatForgeInputToken::Forward);
-		}
-		if (bBack)
-		{
-			Result |= static_cast<uint16>(ECombatForgeInputToken::Back);
-		}
-		return Result;
-	}
-
-	static uint16 NormalizeStateBits(uint16 StateBits)
-	{
-		return static_cast<uint16>((StateBits & static_cast<uint16>(~InputBufferDirectionMask)) | NormalizeDirectionalBits(StateBits & InputBufferDirectionMask));
-	}
-
 	static FString FormatStateBitsForLog(uint16 StateBits)
 	{
-		const uint16 NormalizedBits = NormalizeStateBits(StateBits);
+		const uint16 NormalizedBits = CombatForgeInput::NormalizeStateBits(StateBits);
 		TArray<FString> Parts;
 
 		const uint16 DirectionBits = NormalizedBits & InputBufferDirectionMask;
@@ -149,7 +107,7 @@ namespace
 
 	static bool MatchesHeldElementState(uint16 StateBits, int32 RequiredMask, int32 AcceptedMask)
 	{
-		checkSlow(StateBits == NormalizeStateBits(StateBits));
+		checkSlow(StateBits == CombatForgeInput::NormalizeStateBits(StateBits));
 		if ((static_cast<int32>(StateBits) & RequiredMask) != RequiredMask)
 		{
 			return false;
@@ -232,7 +190,7 @@ bool FCombatForgetInputBuffer::Tick(uint16 StateBits, TArray<const FCombatForgeC
 
 	OutCommands.Reset();
 	++CurrentTick;
-	StateBits = NormalizeStateBits(StateBits);
+	StateBits = CombatForgeInput::NormalizeStateBits(StateBits);
 
 	const uint16 PreviousBits = CurrentStateBits;
 	const bool bStateChanged = StateBits != PreviousBits;
@@ -504,7 +462,7 @@ int32 FCombatForgetInputBuffer::GetMinimumPreviousHeldTicks(int32 Mask) const
 
 bool FCombatForgetInputBuffer::MatchesElementState(uint16 StateBits, int32 RequiredMask, int32 AcceptedMask)
 {
-	checkSlow(StateBits == NormalizeStateBits(StateBits));
+	checkSlow(StateBits == CombatForgeInput::NormalizeStateBits(StateBits));
 	if ((static_cast<int32>(StateBits) & RequiredMask) != RequiredMask)
 	{
 		return false;
