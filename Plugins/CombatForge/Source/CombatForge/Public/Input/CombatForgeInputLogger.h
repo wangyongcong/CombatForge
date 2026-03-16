@@ -18,6 +18,7 @@ class COMBATFORGE_API ICombatForgeInputLogger
 	GENERATED_BODY()
 
 public:
-	virtual void ResetInputLog() = 0;
-	virtual void AddInputLogEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands) = 0;
+	virtual void Reset() = 0;
+	virtual void AddCommandEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands) = 0;
+	virtual void AddEventEntry(int32 Sequence, const TArray<FGameplayTag>& InputEvents) = 0;
 };

@@ -104,7 +104,7 @@ FString UCombatForgeInputTextLogger::FormatStateBitsForDisplay(uint16 StateBits)
 	return FString::Join(Parts, TEXT(" "));
 }
 
-void UCombatForgeInputTextLogger::ResetInputLog()
+void UCombatForgeInputTextLogger::Reset()
 {
 	if (OutputWidget != nullptr)
 	{
@@ -112,17 +112,13 @@ void UCombatForgeInputTextLogger::ResetInputLog()
 	}
 }
 
-void UCombatForgeInputTextLogger::AddInputLogEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands)
-{
-	AppendInputLogEntry(Sequence, StateBits, Commands);
-}
-
-void UCombatForgeInputTextLogger::AppendInputLogEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands)
+void UCombatForgeInputTextLogger::AddCommandEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands)
 {
 	(void)Sequence;
 	FString Line = FormatStateBitsForDisplay(StateBits);
 
 	TArray<FString> MatchedNames;
+	MatchedNames.Reserve(Commands.Num());
 	for (const FCombatForgeCommand* Command : Commands)
 	{
 		if (Command == nullptr)
@@ -149,6 +145,33 @@ void UCombatForgeInputTextLogger::AppendInputLogEntry(int32 Sequence, uint16 Sta
 		Line += FString::Printf(TEXT("  |  %s"), *FString::Join(MatchedNames, TEXT(", ")));
 	}
 
+	UE_LOG(LogCombatForge, Log, TEXT("%s"), *Line);
+	if (OutputWidget != nullptr)
+	{
+		OutputWidget->AppendLogLine(Line);
+	}
+}
+
+void UCombatForgeInputTextLogger::AddEventEntry(int32 Sequence, const TArray<FGameplayTag>& InputEvents)
+{
+	(void)Sequence;
+
+	TArray<FString> Labels;
+	Labels.Reserve(InputEvents.Num());
+	for (const FGameplayTag& EventTag : InputEvents)
+	{
+		if (EventTag.IsValid())
+		{
+			Labels.Add(FString::Printf(TEXT("%s"), *EventTag.ToString()));
+		}
+	}
+
+	if (Labels.Num() == 0)
+	{
+		return;
+	}
+
+	const FString Line = FString::Printf(TEXT("Events  |  %s"), *FString::Join(Labels, TEXT(", ")));
 	UE_LOG(LogCombatForge, Log, TEXT("%s"), *Line);
 	if (OutputWidget != nullptr)
 	{

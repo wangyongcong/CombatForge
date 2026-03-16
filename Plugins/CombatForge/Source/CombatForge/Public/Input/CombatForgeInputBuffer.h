@@ -13,6 +13,7 @@ public:
 	void GetBufferedStates(TArray<uint16>& OutStates) const;
 	const TArray<FString>& GetDebugRejections() const { return DebugRejections; }
 	const TArray<FCombatForgeCommand>& GetCompiledCommandsForTesting() const { return Commands; }
+	uint32 GetCurrentTick() const { return CurrentTick; }
 
 private:
 	struct FTokenRuntimeState
@@ -23,12 +24,13 @@ private:
 
 	struct FCommandRuntimeState
 	{
-		int32 NextStepIndex = 0;
-		int32 SequenceStartTick = INDEX_NONE;
-		int32 LastMatchedTick = INDEX_NONE;
+		// Max command element count is 255
+		uint8 NextStepIndex = 0;
 		bool bCompletedThisTick = false;
 		// Prevents held-terminal commands from re-emitting every tick until the held condition breaks.
 		bool bLatchedComplete = false;
+		uint32 SequenceStartTick = INDEX_NONE;
+		uint32 LastMatchedTick = INDEX_NONE;
 	};
 
 	void ResetRuntimeState();
@@ -52,7 +54,7 @@ private:
 	TArray<uint16> Storage;
 	int32 Head = 0;
 	int32 Count = 0;
-	int32 CurrentTick = 0;
+	uint32 CurrentTick = 0;
 	uint16 CurrentStateBits = 0;
 	uint16 PreviousStateBits = 0;
 	uint16 PressedBits = 0;

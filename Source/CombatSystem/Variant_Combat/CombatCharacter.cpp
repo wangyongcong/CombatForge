@@ -15,7 +15,7 @@
 #include "TimerManager.h"
 #include "Engine/LocalPlayer.h"
 #include "CombatPlayerController.h"
-#include "Input/CombatForgeInputComponent.h"
+#include "Input/CombatForgeCommandInput.h"
 
 ACombatCharacter::ACombatCharacter()
 {
@@ -523,19 +523,11 @@ void ACombatCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ACombatCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		if (CombatForgeInput != nullptr)
-		{
-			CombatForgeInput->ClearInputActionBindings();
-			CombatForgeInput->SetInputActionBinding(ComboAttackAction, ECombatForgeInputButton::X);
-			CombatForgeInput->SetInputActionBinding(HeavyAttackAction, ECombatForgeInputButton::Y);
-			CombatForgeInput->SetDirectionalInputAction(MoveAction);
-		}
-
-		Super::SetupPlayerInputComponent(PlayerInputComponent);
-
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACombatCharacter::Move);
 

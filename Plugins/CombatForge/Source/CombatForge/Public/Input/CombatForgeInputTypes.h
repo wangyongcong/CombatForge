@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "InputAction.h"
 #include "CombatForgeInputTypes.generated.h"
 
@@ -79,6 +80,8 @@ USTRUCT()
 struct FCombatForgeCommand
 {
 	GENERATED_BODY()
+	
+	static constexpr int32 MaxElementCount = 255;
 
 	UPROPERTY(EditAnywhere, Category = "Combat|Input")
 	int32 Id = 0;
@@ -88,6 +91,9 @@ struct FCombatForgeCommand
 
 	UPROPERTY(EditAnywhere, Category = "Combat|Input")
 	FString CommandString;
+
+	UPROPERTY(EditAnywhere, Category = "Combat|Input")
+	FGameplayTag EventTag;
 
 	UPROPERTY(EditAnywhere, Category = "Combat|Input", meta = (ClampMin = 1))
 	int32 InputWindowFrames = 20;
@@ -103,6 +109,18 @@ struct FCombatForgeCommand
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat|Input|Compile")
 	uint32 CompiledSourceHash = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FCombatForgeInputEvent
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input")
+	FGameplayTag EventTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input")
+	int32 IssuedFrame = 0;
 };
 
 USTRUCT()
@@ -121,12 +139,24 @@ struct FCombatForgeCompileMessage
 };
 
 USTRUCT(BlueprintType)
-struct FCombatForgeInputActionBinding
+struct FCombatForgeInputButtonBinding
 {
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input")
 	ECombatForgeInputButton Button = ECombatForgeInputButton::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input")
+	TObjectPtr<UInputAction> InputAction = nullptr;
+};
+
+USTRUCT(BlueprintType)
+struct FCombatForgeInputTagBinding
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input")
+	FGameplayTag EventTag;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Input")
 	TObjectPtr<UInputAction> InputAction = nullptr;

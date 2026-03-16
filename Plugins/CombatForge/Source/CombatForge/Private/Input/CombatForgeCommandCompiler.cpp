@@ -183,6 +183,7 @@ namespace
 		Hash = HashCombineFast(Hash, GetTypeHash(Settings.DefaultInputWindowFrames));
 		Hash = HashCombineFast(Hash, GetTypeHash(Command.Id));
 		Hash = HashCombineFast(Hash, GetTypeHash(Command.CommandString));
+		Hash = HashCombineFast(Hash, GetTypeHash(Command.EventTag));
 		Hash = HashCombineFast(Hash, GetTypeHash(Command.InputWindowFrames));
 		Hash = HashCombineFast(Hash, GetTypeHash(Command.Priority));
 		return Hash;
@@ -296,6 +297,11 @@ namespace
 			}
 
 			CompiledElements.Add(Element);
+			if (CompiledElements.Num() > FCombatForgeCommand::MaxElementCount)
+			{
+				AddError(OutMessages, InOutCommand.Id, FString::Printf(TEXT("Command %d has too many elements"), InOutCommand.Id));
+				return false;
+			}
 
 			if (Index < Source.Len())
 			{
@@ -372,6 +378,7 @@ uint32 FCombatForgeCommandCompiler::ComputeSourceHash(
 	{
 		Hash = HashCombineFast(Hash, GetTypeHash(Command.Id));
 		Hash = HashCombineFast(Hash, GetTypeHash(Command.CommandString));
+		Hash = HashCombineFast(Hash, GetTypeHash(Command.EventTag));
 		Hash = HashCombineFast(Hash, GetTypeHash(Command.InputWindowFrames));
 		Hash = HashCombineFast(Hash, GetTypeHash(Command.Priority));
 		Hash = HashCombineFast(Hash, GetTypeHash(Command.CompiledVersion));

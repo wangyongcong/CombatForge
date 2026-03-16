@@ -290,8 +290,8 @@ bool FCombatForgetInputBuffer::TryAdvanceCommand(const FCombatForgeCommand& Comm
 	// Any partial sequence expires once it runs past its authored input window.
 	if (RuntimeState.NextStepIndex > 0 && RuntimeState.SequenceStartTick != INDEX_NONE)
 	{
-		const int32 ElapsedTicks = CurrentTick - RuntimeState.SequenceStartTick;
-		if (ElapsedTicks > Command.InputWindowFrames)
+		const uint32 ElapsedTicks = CurrentTick - RuntimeState.SequenceStartTick;
+		if (ElapsedTicks > (uint32) Command.InputWindowFrames)
 		{
 			ResetCommandRuntimeState(RuntimeState);
 		}

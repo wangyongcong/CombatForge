@@ -18,11 +18,9 @@ public:
 	static void BuildDisplayTokens(uint16 StateBits, TArray<FCombatForgeInputDisplayToken>& OutTokens);
 	static FString FormatStateBitsForDisplay(uint16 StateBits);
 
-	virtual void ResetInputLog() override;
-	virtual void AddInputLogEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands) override;
-
-private:
-	void AppendInputLogEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands);
+	virtual void Reset() override;
+	virtual void AddCommandEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands) override;
+	virtual void AddEventEntry(int32 Sequence, const TArray<FGameplayTag>& InputEvents) override;
 
 private:
 	UPROPERTY(Transient)

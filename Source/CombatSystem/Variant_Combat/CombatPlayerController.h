@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CombatForgeController.h"
+#include "Framework/CombatForgeController.h"
 #include "CombatPlayerController.generated.h"
 
 class UInputMappingContext;

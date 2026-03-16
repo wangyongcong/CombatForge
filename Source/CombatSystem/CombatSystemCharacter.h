@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CombatForgeCharacter.h"
+#include "Framework/CombatForgeCharacter.h"
 #include "Logging/LogMacros.h"
 #include "CombatSystemCharacter.generated.h"
 

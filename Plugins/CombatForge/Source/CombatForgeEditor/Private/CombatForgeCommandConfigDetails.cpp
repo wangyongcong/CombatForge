@@ -27,7 +27,7 @@ void FCombatForgeCommandConfigDetails::CustomizeDetails(IDetailLayoutBuilder& De
 		CommandConfig = Cast<UCombatForgeCommandConfig>(Objects[0].Get());
 	}
 
-	IDetailCategoryBuilder& CompileCategory = DetailBuilder.EditCategory("Combat|Input|Compile");
+	IDetailCategoryBuilder& CompileCategory = DetailBuilder.EditCategory("Command Compiler");
 	CompileCategory.AddCustomRow(FText::FromString(TEXT("CompileOffline")))
 	.NameContent()
 	[

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CombatForgeCharacter.h"
+#include "Framework/CombatForgeCharacter.h"
 #include "SideScrollingCharacter.generated.h"
 
 class UCameraComponent;

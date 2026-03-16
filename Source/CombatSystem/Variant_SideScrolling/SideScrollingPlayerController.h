@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "CombatForgeController.h"
+#include "Framework/CombatForgeController.h"
 #include "EnhancedInput/Public/InputAction.h"
 #include "SideScrollingPlayerController.generated.h"
 

@@ -3,7 +3,9 @@
 #include "Input/CombatForgeInputBuffer.h"
 #include "Input/CombatForgeCommandCompiler.h"
 #include "Input/CombatForgeCommandConfig.h"
-#include "Input/CombatForgeInputComponent.h"
+#include "Input/CombatForgeActionInput.h"
+#include "Input/CombatForgeCommandInput.h"
+#include "GameplayTagsManager.h"
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS

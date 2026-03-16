@@ -11,7 +11,9 @@ public class CombatForgeEditor : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"CombatForge"
+			"CombatForge",
+			"EnhancedInput",
+			"GameplayTags"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
