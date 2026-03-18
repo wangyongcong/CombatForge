@@ -27,11 +27,11 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	// virtual void ResetCurrentInputEvents();
-	void EmitInputEvent(FGameplayTag EventTag) const;
+	void EmitInputEvent(FGameplayTag EventTag);
 	// void BroadcastInputEvents(const TArray<FCombatForgeInputEvent>& InputEvents) const;
 	
 	void LogInputCommands(uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands);
-	void LogInputEvents(const TArray<FGameplayTag>& InputEvents);
+	void LogInputEvent(FGameplayTag InputEvent);
 	void ResetInputLogger();
 	int32 NextDebugSequence();
 

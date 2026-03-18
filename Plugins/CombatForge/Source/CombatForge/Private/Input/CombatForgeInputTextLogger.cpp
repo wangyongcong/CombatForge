@@ -152,26 +152,11 @@ void UCombatForgeInputTextLogger::AddCommandEntry(int32 Sequence, uint16 StateBi
 	}
 }
 
-void UCombatForgeInputTextLogger::AddEventEntry(int32 Sequence, const TArray<FGameplayTag>& InputEvents)
+void UCombatForgeInputTextLogger::AddEventEntry(int32 Sequence, FGameplayTag InputEvent)
 {
 	(void)Sequence;
-
-	TArray<FString> Labels;
-	Labels.Reserve(InputEvents.Num());
-	for (const FGameplayTag& EventTag : InputEvents)
-	{
-		if (EventTag.IsValid())
-		{
-			Labels.Add(FString::Printf(TEXT("%s"), *EventTag.ToString()));
-		}
-	}
-
-	if (Labels.Num() == 0)
-	{
-		return;
-	}
-
-	const FString Line = FString::Printf(TEXT("Events  |  %s"), *FString::Join(Labels, TEXT(", ")));
+	if (!InputEvent.IsValid()) return;
+	const FString Line = FString::Printf(TEXT("Events  |  %s"), *InputEvent.ToString());
 	UE_LOG(LogCombatForge, Log, TEXT("%s"), *Line);
 	if (OutputWidget != nullptr)
 	{

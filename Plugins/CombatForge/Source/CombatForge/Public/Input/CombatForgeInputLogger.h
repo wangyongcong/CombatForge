@@ -20,5 +20,5 @@ class COMBATFORGE_API ICombatForgeInputLogger
 public:
 	virtual void Reset() = 0;
 	virtual void AddCommandEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands) = 0;
-	virtual void AddEventEntry(int32 Sequence, const TArray<FGameplayTag>& InputEvents) = 0;
+	virtual void AddEventEntry(int32 Sequence, FGameplayTag InputEvent) = 0;
 };

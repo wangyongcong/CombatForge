@@ -20,7 +20,7 @@ public:
 
 	virtual void Reset() override;
 	virtual void AddCommandEntry(int32 Sequence, uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands) override;
-	virtual void AddEventEntry(int32 Sequence, const TArray<FGameplayTag>& InputEvents) override;
+	virtual void AddEventEntry(int32 Sequence, FGameplayTag InputEvent) override;
 
 private:
 	UPROPERTY(Transient)

@@ -3,6 +3,7 @@
 
 #include "Input/CombatForgeInputComponent.h"
 
+#include "CombatForge.h"
 #include "CombatForgeInputUtility.h"
 #include "EnhancedInputComponent.h"
 
@@ -35,26 +36,11 @@ void UCombatForgeInputComponent::SetInputLogger(ICombatForgeInputLogger* InInput
 	ResetInputLogger();
 }
 
-// void UCombatForgeInputComponent::ResetCurrentInputEvents()
-// {
-// }
-
-void UCombatForgeInputComponent::EmitInputEvent(FGameplayTag EventTag) const
+void UCombatForgeInputComponent::EmitInputEvent(FGameplayTag EventTag)
 {
+	LogInputEvent(EventTag);
 	OnInputEvent.Broadcast(EventTag);
 }
-
-// void UCombatForgeInputComponent::BroadcastInputEvents(const TArray<FCombatForgeInputEvent>& InputEvents) const
-// {
-// 	if (!OnInputEvent.IsBound())
-// 	{
-// 		return;
-// 	}
-// 	for (const FCombatForgeInputEvent& InputEvent : InputEvents)
-// 	{
-// 		OnInputEvent.Broadcast(InputEvent);
-// 	}
-// }
 
 void UCombatForgeInputComponent::LogInputCommands(uint16 StateBits, const TArray<const FCombatForgeCommand*>& Commands)
 {
@@ -65,11 +51,11 @@ void UCombatForgeInputComponent::LogInputCommands(uint16 StateBits, const TArray
 	}
 }
 
-void UCombatForgeInputComponent::LogInputEvents(const TArray<FGameplayTag>& InputEvents)
+void UCombatForgeInputComponent::LogInputEvent(FGameplayTag InputEvent)
 {
-	if (InputLogger.GetInterface() != nullptr && InputEvents.Num() > 0)
+	if (InputLogger.GetInterface() != nullptr)
 	{
-		InputLogger->AddEventEntry(NextDebugSequence(), InputEvents);
+		InputLogger->AddEventEntry(NextDebugSequence(), InputEvent);
 	}
 }
 
